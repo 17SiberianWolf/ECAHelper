@@ -5,17 +5,20 @@
   <h2>项目工时查询</h2>
   <div class="row">
     <div class="field">
-      <label>项目号</label>
-      <select id="projectId"></select>
+      <label>项目号（可搜索/可输入）</label>
+      <div id="projectIdBox" class="ss"></div>
+      <input type="hidden" id="projectId">
     </div>
     <div class="field">
       <label>报告月份 起</label>
-      <input type="month" id="pStart" value="{{ month_lo or '' }}">
+      <div id="pStartBox" class="ym"></div>
+      <input type="hidden" id="pStart" value="{{ month_lo or '' }}">
       <input type="hidden" id="pLo" value="{{ month_lo or '' }}">
     </div>
     <div class="field">
       <label>报告月份 止</label>
-      <input type="month" id="pEnd" value="{{ month_hi or '' }}">
+      <div id="pEndBox" class="ym"></div>
+      <input type="hidden" id="pEnd" value="{{ month_hi or '' }}">
       <input type="hidden" id="pHi" value="{{ month_hi or '' }}">
     </div>
     <div class="field">
@@ -23,6 +26,7 @@
       <input type="text" id="wbsPrefix" placeholder="留空=第一级">
     </div>
   </div>
+  <p class="hint">ⓘ 支持输入关键字过滤共 <span id="projectCount">…</span> 个项目号（内存包含匹配、实时高亮）；允许输入列表外的值。</p>
   <div class="quick">
     <button data-q="thisyear">今年</button>
     <button data-q="lastyear">去年</button>

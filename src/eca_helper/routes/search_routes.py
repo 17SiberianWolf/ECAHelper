@@ -38,6 +38,20 @@ def api_options_filters():
     return jsonify({"organizations": orgs, "cost_centers": ccs})
 
 
+@bp.route("/api/options/tasks")
+def api_options_tasks():
+    """任务候选（只读）：全部 task + 累计工时 + 行数，按累计工时降序。
+
+    供综合检索页「任务类别」可搜索下拉使用（US-R2-03）。无静态截断。
+    """
+    conn = get_connection()
+    try:
+        tasks = aggregate.list_tasks(conn)
+    finally:
+        conn.close()
+    return jsonify({"tasks": tasks})
+
+
 @bp.route("/api/query/search", methods=["POST"])
 def api_query_search():
     payload = request.get_json(silent=True) or {}

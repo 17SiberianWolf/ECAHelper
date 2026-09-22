@@ -49,6 +49,16 @@ class QueryFilter:
 # ---------------------------------------------------------------------------
 # 基础条件拼接
 # ---------------------------------------------------------------------------
+def _escape_like(value: str) -> str:
+    """转义 LIKE 模式中的通配符（\\ % _），配合 ESCAPE '\\' 使用。"""
+    return (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+
+
 def _base_where(f: QueryFilter, params: dict) -> str:
     conds: list[str] = []
     if f.report_month_start and f.report_month_end:
@@ -62,8 +72,10 @@ def _base_where(f: QueryFilter, params: dict) -> str:
         conds.append("r.cost_center = :cost_center")
         params["cost_center"] = f.cost_center
     if f.task:
-        conds.append("r.task = :task")
-        params["task"] = f.task
+        # 任务过滤：包含匹配（US-R2-03）。f.task 为空时不得拼接任何条件，
+        # 保证「不带任务筛选」的查询结果与改动前逐字节等价（红线守恒）。
+        conds.append("r.task LIKE :task ESCAPE '\\'")
+        params["task"] = "%" + _escape_like(f.task) + "%"
     if f.resource_id:
         conds.append("r.resource_id_norm = :resource_id")
         params["resource_id"] = f.resource_id
@@ -328,3 +340,20 @@ def list_cost_centers(conn, limit: int = 5000) -> list[str]:
         (limit,),
     )
     return [r["cost_center"] for r in cur.fetchall()]
+
+
+def list_tasks(conn) -> list[dict]:
+    """任务候选清单：全部 task 值 + 累计工时 + 行数，按累计工时降序（US-R2-03 / AC-04-1）。
+
+    - 返回**全部** task（约 1,175 条），不做任何静态截断（决策 13）；
+    - 统计查询一律套用 EXCLUSION_SQL（Q3）。
+    """
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT r.task AS task, COALESCE(SUM(r.actuals_total_h),0) AS h, COUNT(*) AS rows "
+        "FROM timesheet_record r WHERE 1=1 " + EXCLUSION_SQL
+        + " AND r.task IS NOT NULL AND r.task <> '' "
+        "GROUP BY r.task ORDER BY h DESC",
+        {},
+    )
+    return [dict(x) for x in cur.fetchall()]

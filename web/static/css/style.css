@@ -111,12 +111,14 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .tag.warn { background: #fdf0dd; color: var(--warn); }
 .tag.bad { background: #fbe7e7; color: var(--bad); }
 .tag.grey { background: #eef0f3; color: var(--muted); }
+.tag.susp { background: #fdf0dd; color: var(--warn); }
 
 .muted { color: var(--muted); }
 .hidden { display: none; }
 .spinner { color: var(--muted); font-size: 13px; }
 .msg-error { color: var(--bad); }
 .msg-ok { color: var(--ok); }
+.hint { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 6px 0 0; }
 
 .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
 .tabs button { border-color: var(--line); background:#fff; color: var(--ink); padding: 6px 12px; }
@@ -126,6 +128,50 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .collapse-head { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
 .collapse-head .arrow { transition: transform .15s; }
 .collapse-head.open .arrow { transform: rotate(90deg); }
+/* 折叠表体：用 class 控制可见性（与 .hidden 同源思路，避免内联 display 与类规则冲突） */
+table.collapsed { display: none; }
+
+/* ---------- 可搜索下拉 SearchableSelect ---------- */
+.ss { position: relative; display: inline-block; min-width: 220px; }
+.ss-input {
+  width: 100%;
+  padding: 7px 26px 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+}
+.ss-input:focus { outline: none; border-color: var(--brand); }
+.ss-clear {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  cursor: pointer; color: var(--muted); font-size: 14px; line-height: 1;
+}
+.ss-pop {
+  position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 2px);
+  max-height: 280px; overflow-y: auto;
+  background: #fff; border: 1px solid var(--line); border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.12);
+}
+.ss-opt {
+  padding: 6px 10px; cursor: pointer; font-size: 13px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ss-opt.active, .ss-opt:hover { background: var(--chip); }
+.ss-opt mark { background: #fff2b0; color: inherit; padding: 0; }
+.ss-opt-label { display: inline-block; }
+.ss-empty { padding: 8px 10px; }
+
+/* ---------- 年 + 月双下拉 YearMonth ---------- */
+.ym { display: inline-flex; gap: 6px; }
+.ym select { min-width: 0; }
+.ym-year { min-width: 84px; }
+.ym-month { min-width: 70px; }
+
+/* ---------- 导入页文件清单 ---------- */
+.import-list { margin-top: 12px; }
+.import-table th.chk, .import-table td.chk { width: 34px; text-align: center; }
+.import-table td.chk input { cursor: pointer; }
+.import-table tr.row-skip td { color: var(--muted); }
 
 .chart-wrap { width: 100%; overflow-x: auto; }
 svg { display: block; }

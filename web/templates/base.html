@@ -21,6 +21,10 @@
     {% block content %}{% endblock %}
   </main>
   <footer class="footer">ECAHelper · 本地离线 Web 应用 · Flask + SQLite</footer>
+  {# 组件库必须先于 app.js 引入：app.js 依赖 window.ECA（可见性工具 / SearchableSelect / YearMonth）；
+     charts.js 暴露 window.ECACharts，app.js 的图表渲染依赖它。 #}
+  <script src="{{ url_for('static', filename='js/components.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>

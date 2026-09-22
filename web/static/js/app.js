@@ -1,11 +1,14 @@
 /* ECAHelper 前端交互（原生 JS，无构建链）。
  * 负责：导入触发、查询表单、三层结果渲染、快捷区间、图表渲染、导出。
- * 依赖：charts.js（全局 ECACharts）。
+ * 依赖：components.js（window.ECA：可见性工具 / SearchableSelect / YearMonth）、
+ *       charts.js（window.ECACharts）。
+ * 注意：可见性切换一律用 ECA.showEl/hideEl/toggleEl（classList），严禁 style.display。
  */
 (function () {
   "use strict";
 
-  var ECA = {};
+  // 与 components.js 共享同一命名空间（components.js 先加载并创建 window.ECA）。
+  var ECA = window.ECA = window.ECA || {};
 
   function el(id) { return document.getElementById(id); }
   function pad2(n) { return n < 10 ? "0" + n : "" + n; }
@@ -26,21 +29,32 @@
   function setMsg(box, text, kind) {
     if (!box) return;
     box.textContent = text || "";
-    box.className = "spinner " + (kind ? "msg-" + kind : "");
+    // 不破坏其它 class（如 spinner/hidden）：仅增删消息相关类，用 classList 管理可见性。
+    box.classList.remove("msg-ok", "msg-error");
+    if (kind) box.classList.add("msg-" + kind);
+    if (text) ECA.showEl(box);
   }
 
   /* ---------- 三层结果渲染 ---------- */
+  /* 按接口实际返回的键动态渲染：
+   *   - 有 by_person → 渲染「按人员」；有 by_project → 渲染「按项目明细」；
+   *   - 键不存在时不输出任何空表头（修复员工页多渲染空「按项目」表）。
+   * 顶部卡片按接口真实维度展示（修复把 persons 误标为「项目数」的缺陷）。
+   */
   function renderThreeLayer(target, result, opts) {
     opts = opts || {};
-    var personLabel = opts.personLabel || "人员";
     var t = result.total || {};
     var html = "";
-    html += '<div class="cards">';
-    html += card("总工时 (h)", fmtH(t.total_h));
-    html += card("明细行数", t.rows || 0);
-    html += card(personLabel + "数", t.persons || 0);
-    html += card("覆盖月份", t.months || 0);
-    html += "</div>";
+
+    var cards = [];
+    cards.push(card("总工时 (h)", fmtH(t.total_h)));
+    cards.push(card("明细行数", t.rows || 0));
+    cards.push(card("人员数", t.persons || 0));       // t.persons = distinct resource_id_norm（真实口径）
+    if (result.by_project) {
+      cards.push(card("项目数", result.by_project.length)); // 项目维度以 by_project 长度为据
+    }
+    cards.push(card("覆盖月份", t.months || 0));
+    html += '<div class="cards">' + cards.join("") + "</div>";
 
     html += sectionTitle("按月趋势", true);
     html += table(["月份", "工时(h)", "行数"],
@@ -48,8 +62,8 @@
         return [m.month, right(fmtH(m.h)), right(m.rows)];
       }));
 
-    if (opts.projectRows && result.by_project) {
-      html += sectionTitle("按项目", true);
+    if (result.by_project) {
+      html += sectionTitle("按项目明细", true);
       html += table(["项目号", "项目名称", "工时(h)", "行数"],
         result.by_project.map(function (p) {
           return [p.key, p.name || "", right(fmtH(p.h)), right(p.rows)];
@@ -64,11 +78,13 @@
         }));
     }
 
-    html += sectionTitle("按" + personLabel, true);
-    html += table([personLabel + "标识", "名称", "工时(h)", "行数"],
-      (result.by_person || []).map(function (p) {
-        return [p.key, p.name || "", right(fmtH(p.h)), right(p.rows)];
-      }));
+    if (result.by_person) {
+      html += sectionTitle("按人员", true);
+      html += table(["人员标识", "名称", "工时(h)", "行数"],
+        result.by_person.map(function (p) {
+          return [p.key, p.name || "", right(fmtH(p.h)), right(p.rows)];
+        }));
+    }
 
     if (result.wbs) {
       html += sectionTitle("WBS 下一级下钻" + (result.wbs_prefix ? "（" + result.wbs_prefix + "）" : ""), true);
@@ -78,6 +94,7 @@
         }));
     }
     target.innerHTML = html;
+    ECA.showEl(target);
   }
 
   function card(k, v) {
@@ -99,14 +116,14 @@
   }
   function right(s) { return '<span class="num">' + s + "</span>"; }
 
-  /* 折叠交互（事件委托） */
+  /* 折叠交互（事件委托）：统一用 classList（.collapsed）控制表体可见性，避免内联 display。 */
   document.addEventListener("click", function (e) {
     var h = e.target.closest && e.target.closest(".collapse-head");
     if (!h) return;
     h.classList.toggle("open");
     var tbl = h.nextElementSibling;
     if (tbl && tbl.tagName === "TABLE") {
-      tbl.style.display = h.classList.contains("open") ? "" : "none";
+      tbl.classList.toggle("collapsed", !h.classList.contains("open"));
     }
   });
 
@@ -128,7 +145,8 @@
       btn.addEventListener("click", function () {
         var r = quickRange(btn.getAttribute("data-q"),
           el(prefix + "Lo") && el(prefix + "Lo").value, el(prefix + "Hi") && el(prefix + "Hi").value);
-        if (el(prefix + "Start")) { el(prefix + "Start").value = r[0]; el(prefix + "End").value = r[1]; }
+        // 回填到「年 + 月」双下拉（同时同步隐藏域，值恒为 YYYY-MM）
+        if (el(prefix + "Start")) { ECA.ymSet(prefix + "Start", r[0]); ECA.ymSet(prefix + "End", r[1]); }
       });
     });
   }
@@ -178,45 +196,145 @@
 
   /* ================= 页面初始化 ================= */
   ECA.initImport = function () {
-    var btn = el("btnImport");
-    var spin = el("importSpin");
     var res = el("importResult");
-    if (!btn) return;
-    btn.addEventListener("click", function () {
-      btn.disabled = true;
+    var spin = el("importSpin");
+    var listBox = el("importList");
+    var countEl = el("selCount");
+    var allBtn = el("btnImport");
+    var selBtn = el("btnImportSelected");
+    var selAllBtn = el("btnSelectAll");
+    var candidates = [];
+
+    function checkboxEls() {
+      if (!listBox) return [];
+      return listBox.querySelectorAll('input[type="checkbox"][data-path]');
+    }
+    function selectedPaths() {
+      var a = [];
+      Array.prototype.forEach.call(checkboxEls(), function (cb) {
+        if (cb.checked) a.push(cb.getAttribute("data-path"));
+      });
+      return a;
+    }
+    function updateCount() {
+      if (!countEl) return;
+      countEl.textContent = "已选 " + selectedPaths().length + " 个文件";
+    }
+    function fmtSize(bytes) {
+      var b = Number(bytes) || 0;
+      if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
+      if (b >= 1024) return (b / 1024).toFixed(0) + " KB";
+      return b + " B";
+    }
+    function statusTag(status) {
+      if (status === "imported") return '<span class="tag ok">已导入</span>';
+      if (status === "skip") return '<span class="tag warn">跳过</span>';
+      return '<span class="tag grey">未导入</span>';
+    }
+    function renderList() {
+      if (!listBox) return;
+      if (!candidates.length) {
+        listBox.innerHTML = '<p class="muted">目录内没有可导入的 .xlsx 文件。</p>';
+        updateCount();
+        return;
+      }
+      var h = '<table class="import-table"><thead><tr>' +
+        '<th class="chk"></th><th>文件名</th><th class="num">大小</th>' +
+        "<th>报告月份</th><th>状态</th></tr></thead><tbody>";
+      candidates.forEach(function (f) {
+        h += '<tr' + (f.skippable ? ' class="row-skip"' : "") + ">" +
+          '<td class="chk"><input type="checkbox" data-path="' + escAttr(f.path) + '"' +
+          (f.skippable ? " disabled" : "") + "></td>" +
+          "<td>" + escText(f.name) + "</td>" +
+          '<td class="num">' + fmtSize(f.size) + "</td>" +
+          "<td>" + (f.parsed_month || "—") + "</td>" +
+          "<td>" + statusTag(f.status) + "</td></tr>";
+      });
+      h += "</tbody></table>";
+      listBox.innerHTML = h;
+      Array.prototype.forEach.call(checkboxEls(), function (cb) {
+        cb.addEventListener("change", updateCount);
+      });
+      updateCount();
+    }
+    function loadCandidates() {
+      return api("/api/import/candidates", "GET").then(function (d) {
+        candidates = (d && d.files) || [];
+        renderList();
+      }).catch(function (e) {
+        if (listBox) listBox.innerHTML = '<div class="msg-error">' + e.message + "</div>";
+      });
+    }
+
+    function renderReport(rep) {
+      var h = "";
+      h += '<div class="cards">';
+      h += card("文件总数", rep.files_total);
+      h += card("已导入", rep.files_imported);
+      h += card("跳过(已存在)", rep.files_skipped);
+      h += card("失败", rep.files_failed);
+      h += card("新增行", rep.new_rows);
+      h += card("重复标记", rep.duplicate_rows);
+      h += card("异常标记", rep.anomaly_rows);
+      h += card("0工时行", rep.zero_rows);
+      h += card("空ID行", rep.empty_rid_rows);
+      h += "</div>";
+      if (rep.failed_files && rep.failed_files.length) {
+        h += '<h3 style="margin-top:14px">失败文件</h3><ul class="muted">';
+        rep.failed_files.forEach(function (f) { h += "<li>" + escText(f[0]) + " — " + escText(f[1]) + "</li>"; });
+        h += "</ul>";
+      }
+      h += '<p style="margin-top:12px"><a class="link" href="/quality">前往数据质量面板 →</a></p>';
+      return h;
+    }
+
+    function runImport(paths, btn) {
+      if (paths && paths.length === 0) { alert("请先勾选要导入的文件"); return; }
+      if (btn) btn.disabled = true;
       setMsg(spin, "导入中…");
-      res.innerHTML = "";
-      api("/api/import", "POST", { paths: [], mode: "skip" })
+      if (res) res.innerHTML = "";
+      api("/api/import", "POST", { paths: paths || [], mode: "skip" })
         .then(function (rep) {
           setMsg(spin, "导入完成", "ok");
-          var h = "";
-          h += '<div class="cards">';
-          h += card("文件总数", rep.files_total);
-          h += card("已导入", rep.files_imported);
-          h += card("跳过(已存在)", rep.files_skipped);
-          h += card("失败", rep.files_failed);
-          h += card("新增行", rep.new_rows);
-          h += card("重复标记", rep.duplicate_rows);
-          h += card("异常标记", rep.anomaly_rows);
-          h += card("0工时行", rep.zero_rows);
-          h += card("空ID行", rep.empty_rid_rows);
-          h += "</div>";
-          if (rep.failed_files && rep.failed_files.length) {
-            h += '<h3 style="margin-top:14px">失败文件</h3><ul class="muted">';
-            rep.failed_files.forEach(function (f) { h += "<li>" + f[0] + " — " + f[1] + "</li>"; });
-            h += "</ul>";
-          }
-          h += '<p style="margin-top:12px"><a class="link" href="/quality">前往数据质量面板 →</a></p>';
-          res.innerHTML = h;
+          if (res) res.innerHTML = renderReport(rep);
+          return loadCandidates();
         })
         .catch(function (e) { setMsg(spin, "导入失败：" + e.message, "error"); })
-        .finally(function () { btn.disabled = false; });
+        .finally(function () { if (btn) btn.disabled = false; });
+    }
+
+    if (allBtn) allBtn.addEventListener("click", function () { runImport([], allBtn); });
+    if (selBtn) selBtn.addEventListener("click", function () { runImport(selectedPaths(), selBtn); });
+    if (selAllBtn) selAllBtn.addEventListener("click", function () {
+      var boxes = checkboxEls();
+      var allChecked = Array.prototype.every.call(boxes, function (c) { return c.checked || c.disabled; });
+      Array.prototype.forEach.call(boxes, function (c) { if (!c.disabled) c.checked = !allChecked; });
+      updateCount();
     });
+
+    loadCandidates();
   };
 
   ECA.initProject = function () {
+    var lo = el("pLo") ? el("pLo").value : "";
+    var hi = el("pHi") ? el("pHi").value : "";
+    ECA.YearMonth({ mount: "pStartBox", hiddenId: "pStart", lo: lo, hi: hi });
+    ECA.YearMonth({ mount: "pEndBox", hiddenId: "pEnd", lo: lo, hi: hi });
     bindQuick("p");
-    loadOptions("/api/options/projects", "projectId", function (p) { return p.pid; }, true);
+    var projSel = ECA.SearchableSelect({
+      mount: "projectIdBox", hiddenId: "projectId", candidates: [],
+      allowCustom: true, emptyLabel: null, maxRender: 50,
+      placeholder: "输入关键字过滤项目号…",
+      value: el("projectId") ? el("projectId").value : "",
+    });
+    api("/api/options/projects", "GET").then(function (list) {
+      list = list || [];
+      if (projSel) projSel.setCandidates(list.map(function (p) {
+        return { value: p.pid, label: p.pid + (p.name ? " · " + p.name : "") };
+      }));
+      var c = el("projectCount");
+      if (c) c.textContent = list.length.toLocaleString();
+    }).catch(function () {});
     var btn = el("btnQuery");
     if (btn) btn.addEventListener("click", function () {
       var pid = (el("projectId").value || "").trim().toUpperCase();
@@ -226,7 +344,7 @@
       api("/api/query/project", "POST", { project_id: pid, start: start, end: end, wbs_prefix: el("wbsPrefix") ? el("wbsPrefix").value : "" })
         .then(function (r) {
           setMsg(el("pMsg"), "", null);
-          renderThreeLayer(el("result"), r, { personLabel: "人员", projectRows: false });
+          renderThreeLayer(el("result"), r, { personLabel: "人员" });
           renderCharts("project", { start: start, end: end, project_id: pid });
         })
         .catch(function (e) { setMsg(el("pMsg"), e.message, "error"); });
@@ -244,9 +362,22 @@
   };
 
   ECA.initEmployee = function () {
+    var lo = el("eLo") ? el("eLo").value : "";
+    var hi = el("eHi") ? el("eHi").value : "";
+    ECA.YearMonth({ mount: "eStartBox", hiddenId: "eStart", lo: lo, hi: hi });
+    ECA.YearMonth({ mount: "eEndBox", hiddenId: "eEnd", lo: lo, hi: hi });
     bindQuick("e");
-    loadOptions("/api/options/persons", "personId", function (p) { return p.resource_id_norm; }, false,
-      function (p) { return p.resource_id_norm + (p.canonical_name ? " · " + p.canonical_name : ""); });
+    var personSel = ECA.SearchableSelect({
+      mount: "personIdBox", hiddenId: "personId", candidates: [],
+      allowCustom: true, emptyLabel: null, maxRender: 50,
+      placeholder: "输入资源号/姓名过滤…",
+      value: el("personId") ? el("personId").value : "",
+    });
+    api("/api/options/persons", "GET").then(function (list) {
+      if (personSel) personSel.setCandidates((list || []).map(function (p) {
+        return { value: p.resource_id_norm, label: p.resource_id_norm + (p.canonical_name ? " · " + p.canonical_name : "") };
+      }));
+    }).catch(function () {});
     var btn = el("btnQuery");
     if (btn) btn.addEventListener("click", function () {
       var rid = (el("personId").value || "").trim().toUpperCase();
@@ -257,7 +388,7 @@
       api("/api/query/employee", "POST", { resource_id: rid, q: q, start: start, end: end })
         .then(function (r) {
           setMsg(el("eMsg"), "", null);
-          renderThreeLayer(el("result"), r, { personLabel: "项目", projectRows: true });
+          renderThreeLayer(el("result"), r, {});
           renderCharts("employee", { start: start, end: end, resource_id: r.resource_id });
         })
         .catch(function (e) { setMsg(el("eMsg"), e.message, "error"); });
@@ -274,10 +405,36 @@
   };
 
   ECA.initSearch = function () {
+    var lo = el("sLo") ? el("sLo").value : "";
+    var hi = el("sHi") ? el("sHi").value : "";
+    ECA.YearMonth({ mount: "sStartBox", hiddenId: "sStart", lo: lo, hi: hi });
+    ECA.YearMonth({ mount: "sEndBox", hiddenId: "sEnd", lo: lo, hi: hi });
     bindQuick("s");
+    var orgSel = ECA.SearchableSelect({
+      mount: "orgSelBox", hiddenId: "orgSel", candidates: [],
+      allowCustom: true, emptyLabel: "（不限）", maxRender: 50,
+      placeholder: "输入关键字过滤组织…",
+    });
+    var ccSel = ECA.SearchableSelect({
+      mount: "ccSelBox", hiddenId: "ccSel", candidates: [],
+      allowCustom: true, emptyLabel: "（不限）", maxRender: 50,
+      placeholder: "输入关键字过滤成本中心…",
+    });
+    var taskSel = ECA.SearchableSelect({
+      mount: "taskSelBox", hiddenId: "taskSel", candidates: [],
+      allowCustom: true, emptyLabel: "（不限）", maxRender: 50,
+      placeholder: "输入关键字过滤任务类别…",
+    });
     api("/api/options/filters", "GET").then(function (d) {
-      fillSelect("orgSel", d.organizations || []);
-      fillSelect("ccSel", d.cost_centers || []);
+      if (orgSel) orgSel.setCandidates((d.organizations || []).map(function (x) { return { value: x, label: x }; }));
+      if (ccSel) ccSel.setCandidates((d.cost_centers || []).map(function (x) { return { value: x, label: x }; }));
+    }).catch(function () {});
+    api("/api/options/tasks", "GET").then(function (d) {
+      var list = (d && d.tasks) || (Array.isArray(d) ? d : []);
+      if (taskSel) taskSel.setCandidates(list.map(function (t) {
+        var zh = taskZh(t.task);
+        return { value: t.task, label: t.task + (zh ? " · " + zh : "") };
+      }));
     }).catch(function () {});
     var btn = el("btnQuery");
     if (btn) btn.addEventListener("click", function () {
@@ -294,7 +451,7 @@
       api("/api/query/search", "POST", payload)
         .then(function (r) {
           setMsg(el("sMsg"), "", null);
-          renderThreeLayer(el("result"), r, { personLabel: "人员", projectRows: true });
+          renderThreeLayer(el("result"), r, {});
           renderCharts("search", { start: start, end: end });
         })
         .catch(function (e) { setMsg(el("sMsg"), e.message, "error"); });
@@ -365,23 +522,34 @@
   function escText(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
-  function loadOptions(url, selId, keyFn, isProject, labelFn) {
-    var sel = el(selId); if (!sel) return;
-    api(url, "GET").then(function (list) {
-      list = list || [];
-      var html = '<option value="">（选择）</option>';
-      list.forEach(function (p) {
-        var k = keyFn(p), lbl = labelFn ? labelFn(p) : k;
-        html += '<option value="' + escText(k) + '">' + escText(lbl) + "</option>";
-      });
-      sel.innerHTML = html;
-    }).catch(function (e) { sel.innerHTML = '<option>' + e.message + "</option>"; });
+  function escAttr(s) {
+    return escText(s).replace(/"/g, "&quot;");
   }
-  function fillSelect(id, arr) {
-    var sel = el(id); if (!sel) return;
-    var html = '<option value="">（不限）</option>' +
-      (arr || []).map(function (x) { return '<option value="' + escText(x) + '">' + escText(x) + "</option>"; }).join("");
-    sel.innerHTML = html;
+  /* 任务 = 该行工时归属的工作类别。以下中文对照仅为展示用辅助文案，不改变数据值本身。 */
+  var TASK_ZH = {
+    "Leave": "休假",
+    "Procurement services": "采购服务",
+    "Application Software": "应用软件",
+    "Aquisition (project in a offer phase)": "承接中（项目处于报价阶段）",
+    "Sales projects": "销售项目",
+    "Automation Hardware": "自动化硬件",
+    "General activities": "一般性事务",
+    "Project management": "项目管理",
+    "Office Work": "办公室工作",
+    "Site activities": "现场作业",
+    "SCF (Annual Leave)": "年假",
+    "SCF (Sick Leave)": "病假"
+  };
+  function taskZh(task) {
+    if (task == null) return "";
+    if (Object.prototype.hasOwnProperty.call(TASK_ZH, task)) return TASK_ZH[task];
+    // 大小写不敏感兜底（数据中常见大小写差异，如 "Site Activities"）
+    var low = String(task).toLowerCase();
+    var keys = Object.keys(TASK_ZH);
+    for (var i = 0; i < keys.length; i++) {
+      if (keys[i].toLowerCase() === low) return TASK_ZH[keys[i]];
+    }
+    return "";
   }
   function bindExport(btnId, payloadFn) {
     var btn = el(btnId); if (!btn) return;
@@ -394,18 +562,14 @@
         tabs.forEach(function (x) { x.classList.remove("active"); });
         b.classList.add("active");
         var which = b.getAttribute("data-tab");
-        if (el("result")) el("result").style.display = which === "res" ? "" : "none";
-        if (el("chartArea")) el("chartArea").style.display = which === "chart" ? "" : "none";
+        // 一律走 classList（.hidden）切换可见性：内联 style.display 无法覆盖 .hidden 类规则。
+        ECA.toggleEl("result", which === "res");
+        ECA.toggleEl("chartArea", which === "chart");
       });
     });
   }
 
   window.ECA = ECA;
-  document.addEventListener("DOMContentLoaded", function () {
-    ["initImport", "initProject", "initEmployee", "initSearch", "initQuality"].forEach(function (fn) {
-      if (typeof ECA[fn] === "function") {
-        try { ECA[fn](); } catch (e) { console.error(fn, e); }
-      }
-    });
-  });
+  // 页面初始化由各页面模板的 {% block scripts %} 显式调用（window.ECA.initXxx()），
+  // 避免“DOMContentLoaded 再跑一遍”造成组件重复挂载与跨页误绑定。
 })();
