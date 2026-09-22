@@ -268,74 +268,18 @@
   ECA.initImport = function () {
     var res = el("importResult");
     var spin = el("importSpin");
-    var listBox = el("importList");
-    var countEl = el("selCount");
+    var pickBtn = el("btnPickImport");
     var allBtn = el("btnImport");
-    var selBtn = el("btnImportSelected");
-    var selAllBtn = el("btnSelectAll");
-    var candidates = [];
+    var picker = el("filePicker");
+    var hintEl = el("pickHint");
+    var sumEl = el("importSummary");
 
-    function checkboxEls() {
-      if (!listBox) return [];
-      return listBox.querySelectorAll('input[type="checkbox"][data-path]');
-    }
-    function selectedPaths() {
-      var a = [];
-      Array.prototype.forEach.call(checkboxEls(), function (cb) {
-        if (cb.checked) a.push(cb.getAttribute("data-path"));
-      });
-      return a;
-    }
-    function updateCount() {
-      if (!countEl) return;
-      countEl.textContent = "已选 " + selectedPaths().length + " 个文件";
-    }
     function fmtSize(bytes) {
       var b = Number(bytes) || 0;
       if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
       if (b >= 1024) return (b / 1024).toFixed(0) + " KB";
       return b + " B";
     }
-    function statusTag(status) {
-      if (status === "imported") return '<span class="tag ok">已导入</span>';
-      if (status === "skip") return '<span class="tag warn">跳过</span>';
-      return '<span class="tag grey">未导入</span>';
-    }
-    function renderList() {
-      if (!listBox) return;
-      if (!candidates.length) {
-        listBox.innerHTML = '<p class="muted">目录内没有可导入的 .xlsx 文件。</p>';
-        updateCount();
-        return;
-      }
-      var h = '<table class="import-table"><thead><tr>' +
-        '<th class="chk"></th><th>文件名</th><th class="num">大小</th>' +
-        "<th>报告月份</th><th>状态</th></tr></thead><tbody>";
-      candidates.forEach(function (f) {
-        h += '<tr' + (f.skippable ? ' class="row-skip"' : "") + ">" +
-          '<td class="chk"><input type="checkbox" data-path="' + escAttr(f.path) + '"' +
-          (f.skippable ? " disabled" : "") + "></td>" +
-          "<td>" + escText(f.name) + "</td>" +
-          '<td class="num">' + fmtSize(f.size) + "</td>" +
-          "<td>" + (f.parsed_month || "—") + "</td>" +
-          "<td>" + statusTag(f.status) + "</td></tr>";
-      });
-      h += "</tbody></table>";
-      listBox.innerHTML = h;
-      Array.prototype.forEach.call(checkboxEls(), function (cb) {
-        cb.addEventListener("change", updateCount);
-      });
-      updateCount();
-    }
-    function loadCandidates() {
-      return api("/api/import/candidates", "GET").then(function (d) {
-        candidates = (d && d.files) || [];
-        renderList();
-      }).catch(function (e) {
-        if (listBox) listBox.innerHTML = '<div class="msg-error">' + e.message + "</div>";
-      });
-    }
-
     function renderReport(rep) {
       var h = "";
       h += '<div class="cards">';
@@ -349,6 +293,11 @@
       h += card("0工时行", rep.zero_rows);
       h += card("空ID行", rep.empty_rid_rows);
       h += "</div>";
+      if (rep.rejected && rep.rejected.length) {
+        h += '<h3 style="margin-top:14px">未接收的文件</h3><ul class="muted">';
+        rep.rejected.forEach(function (x) { h += "<li>" + escText(x) + "</li>"; });
+        h += "</ul>";
+      }
       if (rep.failed_files && rep.failed_files.length) {
         h += '<h3 style="margin-top:14px">失败文件</h3><ul class="muted">';
         rep.failed_files.forEach(function (f) { h += "<li>" + escText(f[0]) + " — " + escText(f[1]) + "</li>"; });
@@ -357,32 +306,93 @@
       h += '<p style="margin-top:12px"><a class="link" href="/quality">前往数据质量面板 →</a></p>';
       return h;
     }
-
-    function runImport(paths, btn) {
-      if (paths && paths.length === 0) { alert("请先勾选要导入的文件"); return; }
+    /* 无论成败都弹窗提示（用户明确要求）。 */
+    function notify(rep) {
+      var line = "导入完成：已导入 " + (rep.files_imported || 0) + " 个，跳过(已存在) " +
+        (rep.files_skipped || 0) + " 个，失败 " + (rep.files_failed || 0) + " 个；" +
+        "新增 " + (rep.new_rows || 0) + " 行。";
+      if (rep.files_failed > 0 || (rep.failed_files && rep.failed_files.length)) {
+        var fl = (rep.failed_files || []).map(function (f) { return "  " + f[0] + " — " + f[1]; });
+        alert(["导入失败（部分或全部）：", line, "", "失败文件："].concat(fl).join("\n"));
+        return;
+      }
+      alert(line);
+    }
+    function refreshSummary() {
+      if (!sumEl) return;
+      api("/api/import/candidates", "GET").then(function (d) {
+        var fs = (d && d.files) || [];
+        var n = fs.length, done = 0, skip = 0;
+        fs.forEach(function (f) {
+          if (f.status === "imported") done++;
+          else if (f.status === "skip") skip++;
+        });
+        sumEl.textContent = "数据目录共 " + n + " 个文件，其中 " + done +
+          " 个已导入" + (skip ? "、" + skip + " 个为主数据/锁文件（自动跳过）" : "") + "。";
+      }).catch(function () { if (sumEl) sumEl.textContent = ""; });
+    }
+    /* 上传：不能用 api()（它强设 JSON Content-Type，会破坏 multipart 边界）。 */
+    function upload(files, btn) {
+      if (!files || !files.length) return;
+      var fd = new FormData();
+      for (var i = 0; i < files.length; i++) fd.append("files", files[i], files[i].name);
       if (btn) btn.disabled = true;
-      setMsg(spin, "导入中…");
+      setMsg(spin, "导入中…（" + files.length + " 个文件）");
       if (res) res.innerHTML = "";
-      api("/api/import", "POST", { paths: paths || [], mode: "skip" })
+      fetch("/api/import/upload", { method: "POST", body: fd })
+        .then(function (r) {
+          return r.json().then(function (d) {
+            if (!r.ok) throw new Error(d.error || ("HTTP " + r.status));
+            return d;
+          });
+        })
         .then(function (rep) {
           setMsg(spin, "导入完成", "ok");
           if (res) res.innerHTML = renderReport(rep);
-          return loadCandidates();
+          notify(rep);
+          refreshSummary();
         })
-        .catch(function (e) { setMsg(spin, "导入失败：" + e.message, "error"); })
+        .catch(function (e) {
+          setMsg(spin, "导入失败", "error");
+          if (res) res.innerHTML = '<div class="msg-error">' + escText(e.message) + "</div>";
+          alert("导入失败：" + e.message);
+        })
         .finally(function () { if (btn) btn.disabled = false; });
     }
 
-    if (allBtn) allBtn.addEventListener("click", function () { runImport([], allBtn); });
-    if (selBtn) selBtn.addEventListener("click", function () { runImport(selectedPaths(), selBtn); });
-    if (selAllBtn) selAllBtn.addEventListener("click", function () {
-      var boxes = checkboxEls();
-      var allChecked = Array.prototype.every.call(boxes, function (c) { return c.checked || c.disabled; });
-      Array.prototype.forEach.call(boxes, function (c) { if (!c.disabled) c.checked = !allChecked; });
-      updateCount();
+    if (pickBtn && picker) {
+      pickBtn.addEventListener("click", function () { picker.click(); });
+      picker.addEventListener("change", function () {
+        var fs = picker.files;
+        if (!fs || !fs.length) { if (hintEl) hintEl.textContent = ""; return; }
+        var total = 0, names = [];
+        for (var i = 0; i < fs.length; i++) { total += fs[i].size; names.push(fs[i].name); }
+        if (hintEl) hintEl.textContent = "已选 " + fs.length + " 个文件（" + fmtSize(total) + "）" +
+          (fs.length <= 3 ? "：" + names.join("、") : "");
+        upload(fs, pickBtn);
+        picker.value = "";   /* 允许下次重复选同一文件也触发 change */
+      });
+    }
+    if (allBtn) allBtn.addEventListener("click", function () {
+      if (!confirm("将导入数据目录下全部 .xlsx 工时表（已导入的同名文件会自动跳过）。继续吗？")) return;
+      if (allBtn) allBtn.disabled = true;
+      setMsg(spin, "导入中…");
+      if (res) res.innerHTML = "";
+      api("/api/import", "POST", { paths: [], mode: "skip" })
+        .then(function (rep) {
+          setMsg(spin, "导入完成", "ok");
+          if (res) res.innerHTML = renderReport(rep);
+          notify(rep);
+          refreshSummary();
+        })
+        .catch(function (e) {
+          setMsg(spin, "导入失败", "error");
+          alert("导入失败：" + e.message);
+        })
+        .finally(function () { if (allBtn) allBtn.disabled = false; });
     });
 
-    loadCandidates();
+    refreshSummary();
   };
 
   ECA.initProject = function () {

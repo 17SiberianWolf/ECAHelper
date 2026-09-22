@@ -350,15 +350,24 @@
 
     var lo = opts.lo || (hidden ? hidden.value : "") || "";
     var hi = opts.hi || (hidden ? hidden.value : "") || "";
+    var nowY = new Date().getFullYear();
     var loY = lo ? parseInt(lo.split("-")[0], 10) : null;
-    var hiY = hi ? parseInt(hi.split("-")[0], 10) : new Date().getFullYear();
-    if (loY == null || isNaN(loY)) loY = hiY;
-    if (isNaN(hiY)) hiY = loY;
+    var hiY = hi ? parseInt(hi.split("-")[0], 10) : null;
+    if (loY == null || isNaN(loY)) loY = nowY;
+    if (isNaN(hiY)) hiY = nowY;
+    /* 年份上界随当前日期自动扩展：至少到「当前年 + 2」。
+     * 旧实现只取数据上界（数据到 2026-09 就只能选 2026），用户反馈"随年份增长
+     * 能否自动扩展到 2029/2030"——现在与数据解耦：今天(2026)可选到 2028，
+     * 到 2029 年自动变成 2031，无需改代码。下界保持数据最早年（查更早月份只会
+     * 得到 0 工时，无害）。 */
+    var minHi = nowY + 2;
+    if (hiY < minHi) hiY = minHi;
 
     mount.classList.add("ym");
     mount.innerHTML = '<select class="ym-year"></select><select class="ym-month"></select>';
     var yearSel = mount.querySelector(".ym-year");
     var monthSel = mount.querySelector(".ym-month");
+    yearSel.title = "年份范围随数据与当前日期自动扩展（至少到当前年 + 2）";
 
     function fillYears() {
       var html = "";

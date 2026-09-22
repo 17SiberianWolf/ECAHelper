@@ -6,6 +6,9 @@
 
 from __future__ import annotations
 
+import re
+import shutil
+import tempfile
 from pathlib import Path
 
 from flask import Blueprint, jsonify, render_template, request
@@ -16,6 +19,18 @@ from eca_helper.parsers import importer, normalizer
 from eca_helper.parsers.excel_locator import should_skip
 
 bp = Blueprint("import_routes", __name__)
+
+
+def _safe_upload_name(name: str) -> str:
+    """清洗上传文件名：仅去除路径成分与 Windows 非法字符，**保留中文**。
+
+    不用 werkzeug 的 secure_filename——它会剥掉全部非 ASCII 字符，
+    把「在管项目2026.08.xlsx」变成「2026.08.xlsx」，破坏同名幂等判断。
+    """
+    name = (name or "").replace("\\", "_").replace("/", "_")
+    name = re.sub(r'[<>:"|?*\x00-\x1f]', "_", name)
+    name = name.strip().lstrip(".") or "upload.xlsx"
+    return name
 
 
 @bp.route("/")
@@ -92,3 +107,58 @@ def api_import():
         mode = "skip"
     report = importer.import_files(paths, mode=mode)
     return jsonify(report.to_dict())
+
+
+@bp.route("/api/import/upload", methods=["POST"])
+def api_import_upload():
+    """传统文件选择框上传导入（第二轮用户反馈）。
+
+    前端用 ``<input type="file" multiple>`` 选文件后以 multipart/form-data 上传；
+    后端把文件**以原文件名**落到临时目录再交给 importer——这样
+    ``source_file == path.name`` 与既有批次同名，「已导入同名跳过」的幂等
+    语义（Q4）完全不变。导入完成后清理临时目录。
+
+    无论成功还是失败，都返回可供前端弹窗提示的结构：
+        成功 -> ImportReport.to_dict() + {"uploaded": n}
+        失败 -> {"error": "...", "uploaded": n, "failed_names": [...]}
+    """
+    fs = request.files.getlist("files") or request.files.getlist("file")
+    if not fs:
+        return jsonify({"error": "未选择任何文件", "uploaded": 0}), 400
+
+    tmp = Path(tempfile.mkdtemp(prefix="eca_import_"))
+    saved: list[Path] = []
+    rejected: list[str] = []
+    try:
+        for f in fs:
+            raw = f.filename or ""
+            name = _safe_upload_name(raw)
+            if not name.lower().endswith(".xlsx"):
+                rejected.append(f"{raw}（仅支持 .xlsx）")
+                continue
+            if should_skip(name):
+                rejected.append(f"{raw}（锁文件/主数据，自动跳过）")
+                continue
+            dest = tmp / name
+            f.save(str(dest))
+            saved.append(dest)
+
+        if not saved:
+            return jsonify(
+                {"error": "没有可导入的文件", "uploaded": 0,
+                 "rejected": rejected, "failed_names": rejected}
+            ), 400
+
+        report = importer.import_files([str(p) for p in saved], mode="skip")
+        data = report.to_dict()
+        data["uploaded"] = len(saved)
+        if rejected:
+            data["rejected"] = rejected
+        return jsonify(data)
+    except Exception as exc:  # noqa: BLE001 - 上传导入失败也要能给前端弹窗
+        return jsonify(
+            {"error": f"导入失败：{exc!r}", "uploaded": len(saved),
+             "failed_names": rejected}
+        ), 500
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)

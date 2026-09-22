@@ -4,16 +4,17 @@
 <section class="panel">
   <h2>数据导入</h2>
   <p class="muted">数据目录：<code>{{ origin_dir }}</code></p>
-  <p class="muted">勾选下方文件后点击「导入选中」；已导入文件默认跳过（幂等）。
+  <p class="muted">点击「<b>选择文件并导入…</b>」，在弹出的文件选择框中选取一个或多个 <code>.xlsx</code>
+     工时表，点「打开」即开始导入。已导入的同名文件默认跳过（幂等）；
      自动跳过 <code>~$</code> 锁文件与在管项目主数据。</p>
   <div class="row">
-    <button id="btnSelectAll" class="secondary">全选</button>
-    <button id="btnImportSelected">导入选中</button>
-    <button id="btnImport" class="secondary">导入全部</button>
-    <span class="muted" id="selCount">已选 0 个文件</span>
+    <button id="btnPickImport">选择文件并导入…</button>
+    <button id="btnImport" class="secondary">导入全部（数据目录）</button>
+    <input type="file" id="filePicker" multiple accept=".xlsx" hidden>
+    <span class="muted" id="pickHint"></span>
     <span class="spinner hidden" id="importSpin"></span>
   </div>
-  <div id="importList" class="import-list"></div>
+  <p class="muted" id="importSummary">…</p>
   <div id="importResult" class="layer" style="margin-top:14px"></div>
 </section>
 {% endblock %}
