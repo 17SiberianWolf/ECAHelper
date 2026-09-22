@@ -55,6 +55,8 @@ _API_PREFIXES = (
 )
 # 明确不记录的前缀/路径
 _SKIP_PATHS = ("/static/", "/favicon.ico", "/api/export/download")
+# 写文件日志、但**不写审计表**的路径：日志查询本身
+_AUDIT_SKIP_PATHS = ("/api/logs/query",)
 
 
 class _RequestIdFilter(logging.Filter):
@@ -226,6 +228,27 @@ def _should_log() -> bool:
     return False
 
 
+def _should_audit() -> bool:
+    """判断当前请求是否写入 ``audit_log``（比 ``_should_log`` 更窄一档）。
+
+    唯一差别：``/api/logs/query``（含翻页）**只进文件日志、不进审计表**。
+    原因：查日志这个动作本身若也被审计，用户每翻一页就新增 1 条记录，
+    页面上的「总条数」会边查边涨，产生"数据自己在增长"的困惑
+    （联调反馈，见 752689a 后的 review）。
+
+    取舍：可追溯性不丢 —— 文件日志 ``eca.log`` 仍完整记录每一次查询
+    （含 request_id / 耗时 / 状态码）；而 ``/api/logs/export``（导出审计
+    日志属敏感操作）照旧入审计，``/api/logs/query`` 若发生 500 也会入审计。
+    """
+    if not _should_log():
+        return False
+    try:
+        path = request.path or ""
+    except Exception:  # noqa: BLE001 - 无请求上下文时不审计
+        return False
+    return not path.startswith(_AUDIT_SKIP_PATHS)
+
+
 def _action_from_endpoint() -> str:
     """由 endpoint 推导 action：``api_query_project`` -> ``query.project``。"""
     endpoint = (request.endpoint or "").split(".")[-1]
@@ -305,17 +328,18 @@ def register_hooks(app) -> None:
             t0 = getattr(g, "_t0", None)
             duration_ms = int((time.perf_counter() - t0) * 1000) if t0 is not None else None
             path = request.path or ""
-            audit_service.write_audit(
-                category=_category_for(path),
-                action=_action_from_endpoint(),
-                level="INFO",
-                target=_extract_target(),
-                result="ok",
-                status_code=resp.status_code,
-                duration_ms=duration_ms,
-                request_id=getattr(g, "request_id", None) or get_request_id(),
-                message=f"{request.method} {path} 处理完成",
-            )
+            if _should_audit():
+                audit_service.write_audit(
+                    category=_category_for(path),
+                    action=_action_from_endpoint(),
+                    level="INFO",
+                    target=_extract_target(),
+                    result="ok",
+                    status_code=resp.status_code,
+                    duration_ms=duration_ms,
+                    request_id=getattr(g, "request_id", None) or get_request_id(),
+                    message=f"{request.method} {path} 处理完成",
+                )
             logger.info(
                 "请求完成 %s %s 状态码=%s 耗时=%sms",
                 request.method,
