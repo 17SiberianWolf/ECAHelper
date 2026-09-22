@@ -1,11 +1,17 @@
-"""ECAHelper 应用入口（系统设计书.md §2 / T01 / T13）。
+"""ECAHelper 应用入口（重构设计书.md §3 / T01）。
 
 职责：
-    - 构建 Flask app（模板/静态目录指向项目根）；
+    - 构建 Flask app（模板/静态目录由 config 的三态路径解析定位）；
     - 注册全部蓝图（导入/项目/员工/检索/质量/导出/图表）；
     - 启动期 ensure_db() 建库；
+    - 空库自举：DB 为空且存在 OriginSource 时同步导入（T03）；
     - 使用 Waitress 常驻（纯 Python，无 C 依赖）；
     - 端口固定 APP_PORT（被占用自动 +1），并自动打开浏览器。
+
+三态运行（开发直跑 / 项目内 venv / PyInstaller 冻结）下的 sys.path：
+    · 非冻结：把本文件所在目录（<root>/src）注入 sys.path[0]，
+              使 `import config` / `from eca_helper... import ...` 生效；
+    · 冻结：禁止手工注入（由 PyInstaller 引导器负责），故此处加 frozen 守卫。
 """
 
 from __future__ import annotations
@@ -16,11 +22,13 @@ import threading
 import webbrowser
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+# 非冻结时注入 src/ 到 sys.path，保证顶层模块名 `config` / `eca_helper` 可导入。
+if not getattr(sys, "frozen", False):
+    SRC_DIR = Path(__file__).resolve().parent
+    if str(SRC_DIR) not in sys.path:
+        sys.path.insert(0, str(SRC_DIR))
 
-import eca_helper  # noqa: F401  确保 ROOT 注入 sys.path
+import eca_helper  # noqa: F401  确保 src/ 注入 sys.path
 import config
 from flask import Flask
 
@@ -49,8 +57,8 @@ _BLUEPRINTS = (
 def create_app() -> Flask:
     app = Flask(
         __name__,
-        template_folder=str(ROOT / "templates"),
-        static_folder=str(ROOT / "static"),
+        template_folder=str(config.TEMPLATE_DIR),
+        static_folder=str(config.STATIC_DIR),
     )
     app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
     for bp in _BLUEPRINTS:

@@ -13,15 +13,17 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from config import DB_PATH
+from config import DB_PATH, SCHEMA_PATH
 
-_SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
+# schema 路径由 config 统一解析：非冻结 = <src>/eca_helper/schema.sql；
+# 冻结 = _MEIPASS/eca_helper/schema.sql（由 PyInstaller --add-data 落到 bundle）。
+_SCHEMA_PATH = Path(SCHEMA_PATH)
 
 
 def get_connection(db_path: str | Path | None = None) -> sqlite3.Connection:
     """返回一个新的 SQLite 连接。
 
-    db_path 为 None 时使用 config.DB_PATH（项目根目录 eca_helper.db）。
+    db_path 为 None 时使用 config.DB_PATH（可写数据根下的 data/eca_helper.db）。
     连接开启外键约束，并使用 Row 工厂。
     """
     path = str(db_path) if db_path is not None else str(DB_PATH)

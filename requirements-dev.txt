@@ -1,0 +1,2 @@
+# ECAHelper 构建期依赖（仅用于 PyInstaller 打包，不进入运行时）
+pyinstaller>=6.0

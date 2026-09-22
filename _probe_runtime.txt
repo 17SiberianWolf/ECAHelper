@@ -1,0 +1,42 @@
+== runtime dir ==
+exists: True
+size_MB: 144.1 files: 4113
+== top-level ==
+   .extracted
+   DLLs
+   LICENSE.txt
+   Lib
+   Scripts
+   include
+   libs
+   python.exe
+   python3.cmd
+   python3.dll
+   python3.exe
+   python313.dll
+   pythonw.exe
+   vcruntime140.dll
+   vcruntime140_1.dll
+== markers ==
+   python313._pth False
+   pyvenv.cfg False
+   Lib True
+   DLLs True
+   Scripts True
+== site-packages key deps ==
+   flask True
+   waitress True
+   openpyxl True
+   werkzeug True
+   jinja2 True
+   click True
+   itsdangerous True
+   markupsafe True
+   et_xmlfile True
+== sys.prefix / base_prefix ==
+  sys.executable: C:\Users\Administrator\.workbuddy\binaries\python\versions\3.13.12\python.exe
+  sys.prefix     : C:\Users\Administrator\.workbuddy\binaries\python\versions\3.13.12
+  sys.base_prefix: C:\Users\Administrator\.workbuddy\binaries\python\versions\3.13.12
+  relocatable?   : True
+== pip check ==
+  pip: pip 26.1.2 from C:\Users\Administrator\.workbuddy\binaries\python\versions\3.13.12\Lib\site-packages\pip (python 3.13)

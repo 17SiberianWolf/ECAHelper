@@ -10,11 +10,16 @@ __pycache__/
 venv/
 
 # 运行时生成的数据库与导出（含员工隐私工时数据）
-eca_helper.db
-data/
+data/*.db
+data/exports/*
+!data/exports/.gitkeep
 
 # 原始输入工时表（含员工隐私，体积大，不入库）
 OriginSource/
+
+# PyInstaller 构建产物（ECAHelper.spec 作为唯一真源需入库，故不忽略 *.spec）
+build/
+dist/
 
 # 临时 / 日志
 *.log
