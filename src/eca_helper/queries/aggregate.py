@@ -73,6 +73,11 @@ class QueryFilter:
     resource_id: Optional[str] = None
     project_id: Optional[str] = None
     include_empty_project: bool = False
+    # 组织是否「包含下级」：组织码按前缀分层（EA 是父，EAR/EAI/EAP… 是子），
+    # 用户选 EA 的直觉是「整个 EA 部门」。True 时用前缀匹配（LIKE 'EA%'），
+    # False 时精确等值。默认 False 以保持既有调用方行为不变；
+    # 综合检索页默认勾选（见 US-R2-07）。
+    include_sub_organization: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -88,27 +93,43 @@ def _escape_like(value: str) -> str:
     )
 
 
-def _base_where(f: QueryFilter, params: dict) -> str:
+def _base_where(f: QueryFilter, params: dict, exclude: Optional[str] = None) -> str:
+    """拼接综合检索基础条件。
+
+    exclude: 联动计数时排除某维度「整列」（"organization" / "cost_center" /
+        "task" / "person" / "project"），其余维度仍生效。为 None 时不做排除
+        （等同原行为）。
+        计算维度 D 的候选时，传 exclude=D：D 整列放开（用户正要改选 D），
+        但其它维度的当前选择全部保留——这正是「下拉只列与其它条件真正共现
+        的值」的机制，从根上杜绝选到空组合。
+    既有的 search() / top_n() 调用均不加 exclude，行为不变。
+    """
     conds: list[str] = []
     if f.report_month_start and f.report_month_end:
         conds.append("r.report_month BETWEEN :m_start AND :m_end")
         params["m_start"] = f.report_month_start
         params["m_end"] = f.report_month_end
-    if f.organization:
-        conds.append("r.organization = :organization")
-        params["organization"] = f.organization
-    if f.cost_center:
+    if f.organization and exclude != "organization":
+        # 组织码按前缀分层（EA → EAR/EAI/EAP…）。「含下级」用前缀包含匹配，
+        # 让选 EA 得到整个 EA 部门（实测 38 行 → 9,831 行）；否则精确等值。
+        if f.include_sub_organization:
+            conds.append("r.organization LIKE :organization ESCAPE '\\'")
+            params["organization"] = _escape_like(f.organization) + "%"
+        else:
+            conds.append("r.organization = :organization")
+            params["organization"] = f.organization
+    if f.cost_center and exclude != "cost_center":
         conds.append("r.cost_center = :cost_center")
         params["cost_center"] = f.cost_center
-    if f.task:
+    if f.task and exclude != "task":
         # 任务过滤：包含匹配（US-R2-03）。f.task 为空时不得拼接任何条件，
         # 保证「不带任务筛选」的查询结果与改动前逐字节等价（红线守恒）。
         conds.append("r.task LIKE :task ESCAPE '\\'")
         params["task"] = "%" + _escape_like(f.task) + "%"
-    if f.resource_id:
+    if f.resource_id and exclude != "person":
         conds.append("r.resource_id_norm = :resource_id")
         params["resource_id"] = f.resource_id
-    if f.project_id:
+    if f.project_id and exclude != "project":
         # 按父项目号过滤（归并口径）：匹配该父号名下整棵子树（§5.2 #1）。
         # 注意：本函数末尾统一前缀 " AND "，此处不得再加前导 AND，否则双 AND 语法错。
         conds.append(PROJECT_BASE_SQL + " = :project_id")
@@ -266,6 +287,86 @@ def search(conn, f: QueryFilter) -> dict:
     by_project = [dict(x) for x in cur.fetchall()]
     return {"total": total, "by_month": by_month, "by_person": by_person,
             "by_project": by_project}
+
+
+# ---------------------------------------------------------------------------
+# 联动计数（faceted search）—— 根治「选到空组合」
+# ---------------------------------------------------------------------------
+def search_facets(conn, f: QueryFilter) -> dict:
+    """在「其他维度已选条件」下，返回各维度候选值及其行数。
+
+    返回 {organization, cost_center, task, person, project} 五个列表，
+    每项 {value, label, count}。只返回 count>0 的候选——从机制上排除
+    「选到空组合」（组织与成本中心/人员/项目彼此正交，任意两值叠加常为 0）。
+
+    - 组织：含下级开关打开时按前缀展开计数，与查询语义一致（选 EA 显示整个
+      EA 部门的行数，而非精确的 38 行）；否则精确计数。
+    - 人员/项目：取规范主键（resource_id_norm / 父项目号），label 取出现频次
+      最高的姓名 / 项目名。
+    """
+    return {
+        "organization": _facet_organization(conn, f),
+        "cost_center": _facet_dim(conn, f, "cost_center", "r.cost_center", "r.cost_center"),
+        "task": _facet_dim(conn, f, "task", "r.task", "r.task"),
+        "person": _facet_dim(conn, f, "person", "r.resource_id_norm", "MAX(r.name_snapshot)"),
+        "project": _facet_dim(conn, f, "project", PROJECT_BASE_SQL, "MAX(r.project_name)"),
+    }
+
+
+def _facet_dim(conn, f: QueryFilter, exclude: str, dim_expr: str, label_expr: str) -> list[dict]:
+    """单维度联动计数：排除 exclude 自身，套用其余条件 + 空项目号开关。"""
+    params: dict = {}
+    where = _base_where(f, params, exclude=exclude) + _empty_project_cond(f)
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT {dim_expr} AS value, {label_expr} AS label, COUNT(*) AS rows "
+        f"FROM timesheet_record r WHERE 1=1 {EXCLUSION_SQL}{where} "
+        f"AND {dim_expr} IS NOT NULL AND {dim_expr} <> '' "
+        f"GROUP BY {dim_expr} ORDER BY rows DESC LIMIT 3000",
+        params,
+    )
+    return [
+        {"value": r["value"], "label": (r["label"] or r["value"]), "count": r["rows"]}
+        for r in cur.fetchall()
+    ]
+
+
+def _facet_organization(conn, f: QueryFilter) -> list[dict]:
+    """组织联动计数。
+
+    先取各「精确组织码」在「其它条件下」的行数（GROUP BY organization，走索引，
+    毫秒级），再在 Python 中按前缀归并：
+    - 含下级（默认）：每个候选父码 = 其自身 + 所有以其为前缀的子码行数之和，
+      与查询语义一致（选 EA 显示整个 EA 部门，而非精确的 38 行）。
+    - 否则精确计数。
+
+    采用「精确计数 + Python 前缀归并」而非 SQL 自连接 LIKE，因后者在 2.6 万行 ×
+    78 个组织码上的嵌套 LIKE 评估会极慢（实测超时）；Python 归并仅 O(组织码²)≈6k 次。
+    组织码为纯字母数字，前缀判定用 startswith 即可。
+    """
+    params: dict = {}
+    where = _base_where(f, params, exclude="organization") + _empty_project_cond(f)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT r.organization AS value, COUNT(*) AS rows "
+        "FROM timesheet_record r WHERE 1=1 " + EXCLUSION_SQL + where +
+        " AND r.organization IS NOT NULL AND r.organization <> '' "
+        "GROUP BY r.organization",
+        params,
+    )
+    exact = {r["value"]: r["rows"] for r in cur.fetchall()}
+    if not f.include_sub_organization:
+        out = [{"value": k, "label": k, "count": v} for k, v in exact.items()]
+    else:
+        out = []
+        for parent in exact:
+            tot = 0
+            for code, cnt in exact.items():
+                if code == parent or code.startswith(parent):
+                    tot += cnt
+            out.append({"value": parent, "label": parent, "count": tot})
+    out.sort(key=lambda x: x["count"], reverse=True)
+    return out[:3000]
 
 
 # ---------------------------------------------------------------------------

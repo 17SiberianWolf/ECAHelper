@@ -20,6 +20,7 @@
       <label>组织（可搜索）</label>
       <div id="orgSelBox" class="ss"></div>
       <input type="hidden" id="orgSel">
+      <label class="chk-inline"><input type="checkbox" id="incSub" checked> 含下级</label>
     </div>
     <div class="field">
       <label>成本中心（可搜索）</label>
@@ -32,10 +33,20 @@
       <input type="hidden" id="taskSel">
     </div>
     <div class="field">
+      <label>人员（可搜索）</label>
+      <div id="personSelBox" class="ss"></div>
+      <input type="hidden" id="personSel">
+    </div>
+    <div class="field">
+      <label>项目（可搜索/按父项目号）</label>
+      <div id="projectSelBox" class="ss"></div>
+      <input type="hidden" id="projectSel">
+    </div>
+    <div class="field">
       <label><input type="checkbox" id="incEmpty"> 含空项目号行</label>
     </div>
   </div>
-  <p class="hint">ⓘ 任务 = 该行工时归属的工作类别。支持关键字过滤，选项按累计工时从高到低排列；输入时在内存中匹配、只渲染前 50 条，任何取值都能被关键字找到；也可直接输入列表外的值（按「包含」匹配）。</p>
+  <p class="hint">ⓘ 下拉项后的 <b>N 行</b> = 在当前其他条件下该取值能命中的行数；<b>零行项不出现</b>，因此不会选到空组合。「含下级」默认开启：选 <code>EA</code> 即整个 EA 部门（含 EAR/EAI/EAP…）。任务支持关键字过滤与列表外输入（按「包含」匹配）。</p>
   <div class="quick">
     <button data-q="thisyear">今年</button>
     <button data-q="lastyear">去年</button>
@@ -44,6 +55,7 @@
   </div>
   <div class="row" style="margin-top:12px">
     <button id="btnQuery">查询</button>
+    <button class="secondary" id="btnFacets">刷新候选计数</button>
     <span class="spinner" id="sMsg"></span>
   </div>
 </section>
@@ -53,6 +65,7 @@
     <button data-tab="res" class="active">三层结果</button>
     <button data-tab="chart">图表</button>
   </div>
+  <div id="zeroGuide" class="hidden"></div>
   <div id="result"></div>
   <div id="chartArea" class="hidden">
     <h3>按月趋势</h3>

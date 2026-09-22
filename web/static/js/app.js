@@ -502,57 +502,154 @@
     bindQuick("s");
     var orgSel = ECA.SearchableSelect({
       mount: "orgSelBox", hiddenId: "orgSel", candidates: [],
-      allowCustom: true, emptyLabel: "（不限）", maxRender: 50,
-      placeholder: "输入关键字过滤组织…",
+      allowCustom: false, emptyLabel: "（不限）", maxRender: 50,
+      placeholder: "输入关键字过滤组织…", onChange: refreshFacets,
     });
     var ccSel = ECA.SearchableSelect({
       mount: "ccSelBox", hiddenId: "ccSel", candidates: [],
-      allowCustom: true, emptyLabel: "（不限）", maxRender: 50,
-      placeholder: "输入关键字过滤成本中心…",
+      allowCustom: false, emptyLabel: "（不限）", maxRender: 50,
+      placeholder: "输入关键字过滤成本中心…", onChange: refreshFacets,
     });
     var taskSel = ECA.SearchableSelect({
       mount: "taskSelBox", hiddenId: "taskSel", candidates: [],
       allowCustom: true, emptyLabel: "（不限）", maxRender: 50,
-      placeholder: "输入关键字过滤任务类别…",
+      placeholder: "输入关键字过滤任务类别…", onChange: refreshFacets,
     });
-    api("/api/options/filters", "GET").then(function (d) {
-      if (orgSel) orgSel.setCandidates((d.organizations || []).map(function (x) { return { value: x, label: x }; }));
-      if (ccSel) ccSel.setCandidates((d.cost_centers || []).map(function (x) { return { value: x, label: x }; }));
-    }).catch(function () {});
-    api("/api/options/tasks", "GET").then(function (d) {
-      var list = (d && d.tasks) || (Array.isArray(d) ? d : []);
-      if (taskSel) taskSel.setCandidates(list.map(function (t) {
-        var zh = taskZh(t.task);
-        return { value: t.task, label: t.task + (zh ? " · " + zh : "") };
-      }));
-    }).catch(function () {});
+    var personSel = ECA.SearchableSelect({
+      mount: "personSelBox", hiddenId: "personSel", candidates: [],
+      allowCustom: false, emptyLabel: "（不限）", maxRender: 50,
+      placeholder: "输入关键字过滤人员…", onChange: refreshFacets,
+    });
+    var projectSel = ECA.SearchableSelect({
+      mount: "projectSelBox", hiddenId: "projectSel", candidates: [],
+      allowCustom: false, emptyLabel: "（不限）", maxRender: 50,
+      placeholder: "输入关键字过滤项目…", onChange: refreshFacets,
+    });
+
+    function currentFilter() {
+      return {
+        start: el("sStart").value, end: el("sEnd").value,
+        organization: el("orgSel").value || null,
+        cost_center: el("ccSel").value || null,
+        task: el("taskSel").value || null,
+        resource_id: el("personSel").value || null,
+        project_id: el("projectSel").value || null,
+        include_empty_project: el("incEmpty") ? el("incEmpty").checked : false,
+        include_sub_organization: el("incSub") ? el("incSub").checked : false
+      };
+    }
+
+    // 联动计数：用 /api/search/facets 给各下拉注入「N 行」并剔除零行项
+    var _pruning = false;
+    function refreshFacets() {
+      if (_pruning) return;
+      var f = currentFilter();
+      if (!f.start || !f.end) return;
+      api("/api/search/facets", "POST", f).then(function (fac) {
+        if (orgSel) orgSel.setCandidates((fac.organization || []).map(function (x) {
+          return { value: x.value, label: x.label, badge: x.count + " 行" };
+        }));
+        if (ccSel) ccSel.setCandidates((fac.cost_center || []).map(function (x) {
+          return { value: x.value, label: x.label, badge: x.count + " 行" };
+        }));
+        if (taskSel) taskSel.setCandidates((fac.task || []).map(function (x) {
+          var zh = taskZh(x.value);
+          return { value: x.value, label: x.value + (zh ? " · " + zh : ""), badge: x.count + " 行" };
+        }));
+        if (personSel) personSel.setCandidates((fac.person || []).map(function (x) {
+          return { value: x.value, label: (x.label || x.value) + "（" + x.value + "）", badge: x.count + " 行" };
+        }));
+        if (projectSel) projectSel.setCandidates((fac.project || []).map(function (x) {
+          return { value: x.value, label: (x.label || x.value), badge: x.count + " 行" };
+        }));
+        // 自动清除「在其他条件下已无共现行」的已选值（根治含下级切换等残留空组合）。
+        // 仅对精确单值维度（组织/成本中心/人员/项目）生效；任务为包含匹配、允许列表外值，跳过。
+        var stale = [];
+        function chk(sel, dimKey, field) {
+          var v = el(field).value;
+          if (!v) return;
+          var ok = (fac[dimKey] || []).some(function (x) { return x.value === v; });
+          if (!ok) stale.push(sel);
+        }
+        chk(orgSel, "organization", "orgSel");
+        chk(ccSel, "cost_center", "ccSel");
+        chk(personSel, "person", "personSel");
+        chk(projectSel, "project", "projectSel");
+        if (stale.length) {
+          _pruning = true;
+          stale.forEach(function (s) { s.commit(""); });
+          _pruning = false;
+          refreshFacets(); // 清掉残留后重算一次（已无空组合）
+          return;
+        }
+      }).catch(function () {});
+    }
+
+    // 任一筛选变化（含下级开关）→ 刷新候选计数（保证下拉不再通向死路）
+    if (el("incSub")) el("incSub").addEventListener("change", refreshFacets);
+
+    refreshFacets(); // 初始播种计数
+
+    function renderZeroGuide(r) {
+      var g = el("zeroGuide");
+      if (!g) return;
+      if (r && r.total && r.total.rows > 0) { g.classList.add("hidden"); g.innerHTML = ""; return; }
+      var f = currentFilter();
+      var parts = [];
+      if (f.organization) parts.push("组织=" + f.organization + (f.include_sub_organization ? "（含下级）" : ""));
+      if (f.cost_center) parts.push("成本中心=" + f.cost_center);
+      if (f.task) parts.push("任务=" + f.task);
+      if (f.resource_id) parts.push("人员=" + f.resource_id);
+      if (f.project_id) parts.push("项目=" + f.project_id);
+      var why = parts.length
+        ? "这些条件叠加后无共现行（组织与成本中心/人员/项目彼此正交，任意两值常无交集）。"
+        : "当前月份区间内无数据。";
+      g.innerHTML =
+        '<div class="msg-warn">' +
+        '<b>当前条件下无数据。</b> ' + escText(why) + '<br>' +
+        '已选：' + (parts.join("；") || "（无）") +
+        '<div style="margin-top:8px">' +
+        '<button class="secondary" id="btnRelax">放宽：清除 成本中心 / 任务 / 人员 / 项目</button>' +
+        '</div></div>';
+      g.classList.remove("hidden");
+      var relax = el("btnRelax");
+      if (relax) relax.addEventListener("click", function () {
+        if (ccSel) ccSel.commit("");
+        if (taskSel) taskSel.commit("");
+        if (personSel) personSel.commit("");
+        if (projectSel) projectSel.commit("");
+        refreshFacets();
+        el("btnQuery").click();
+      });
+    }
+
     var btn = el("btnQuery");
     if (btn) btn.addEventListener("click", function () {
       var start = el("sStart").value, end = el("sEnd").value;
       if (!start || !end) { alert("请填写月份区间"); return; }
-      var payload = {
-        start: start, end: end,
-        organization: el("orgSel").value || null,
-        cost_center: el("ccSel").value || null,
-        task: el("taskSel") ? el("taskSel").value || null : null,
-        include_empty_project: el("incEmpty") ? el("incEmpty").checked : false
-      };
+      var payload = currentFilter();
       setMsg(el("sMsg"), "查询中…");
       api("/api/query/search", "POST", payload)
         .then(function (r) {
           setMsg(el("sMsg"), "", null);
+          renderZeroGuide(r);
           renderThreeLayer(el("result"), r, { start: start, end: end });
           renderCharts("search", { start: start, end: end });
         })
         .catch(function (e) { setMsg(el("sMsg"), e.message, "error"); });
     });
+    var bf = el("btnFacets");
+    if (bf) bf.addEventListener("click", refreshFacets);
     bindExport("btnExport", function () {
       return {
         start: el("sStart").value, end: el("sEnd").value,
         organization: el("orgSel").value || null,
         cost_center: el("ccSel").value || null,
         task: el("taskSel") ? el("taskSel").value || null : null,
+        resource_id: el("personSel").value || null,
+        project_id: el("projectSel").value || null,
         include_empty_project: el("incEmpty") ? el("incEmpty").checked : false,
+        include_sub_organization: el("incSub") ? el("incSub").checked : false,
         title: "检索", format: (el("expFmt") ? el("expFmt").value : "xlsx"),
         lang: (el("expLang") ? el("expLang").value : "both")
       };

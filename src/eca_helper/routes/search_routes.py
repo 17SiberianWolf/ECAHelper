@@ -68,6 +68,7 @@ def api_query_search():
         resource_id=(payload.get("resource_id") or None),
         project_id=(payload.get("project_id") or None),
         include_empty_project=bool(payload.get("include_empty_project", False)),
+        include_sub_organization=bool(payload.get("include_sub_organization", False)),
     )
     conn = get_connection()
     try:
@@ -76,3 +77,34 @@ def api_query_search():
     finally:
         conn.close()
     return jsonify(result)
+
+
+@bp.route("/api/search/facets", methods=["POST"])
+def api_search_facets():
+    """联动计数（只读）：在「其他维度已选条件」下，返回各维度候选值及其行数。
+
+    前端据此给每个下拉项标注「当前其他条件下有 N 行」，并剔除零行候选，
+    从机制上避免用户选到空组合。参数同 /api/query/search。
+    """
+    payload = request.get_json(silent=True) or {}
+    start = payload.get("start")
+    end = payload.get("end")
+    if not start or not end:
+        return jsonify({"error": "start / end 为必填"}), 400
+    f = QueryFilter(
+        report_month_start=start,
+        report_month_end=end,
+        organization=(payload.get("organization") or None),
+        cost_center=(payload.get("cost_center") or None),
+        task=(payload.get("task") or None),
+        resource_id=(payload.get("resource_id") or None),
+        project_id=(payload.get("project_id") or None),
+        include_empty_project=bool(payload.get("include_empty_project", False)),
+        include_sub_organization=bool(payload.get("include_sub_organization", False)),
+    )
+    conn = get_connection()
+    try:
+        facets = aggregate.search_facets(conn, f)
+    finally:
+        conn.close()
+    return jsonify(facets)
