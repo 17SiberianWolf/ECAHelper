@@ -15,6 +15,7 @@
       <a href="/employee" class="{{ 'active' if active == 'employee' else '' }}">员工工时</a>
       <a href="/search" class="{{ 'active' if active == 'search' else '' }}">综合检索</a>
       <a href="/quality" class="{{ 'active' if active == 'quality' else '' }}">数据质量</a>
+      <a href="/logs" class="{{ 'active' if active == 'logs' else '' }}">系统日志</a>
     </nav>
   </header>
   <main class="container">
@@ -26,6 +27,8 @@
   <script src="{{ url_for('static', filename='js/components.js') }}"></script>
   <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {# 系统日志页交互（logs.html 调用 window.ECA.initLogs）；置于页面级 scripts 块之前。 #}
+  <script src="{{ url_for('static', filename='js/logs.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

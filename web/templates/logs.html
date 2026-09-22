@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% set active = 'logs' %}
+{% block content %}
+<section class="panel">
+  <h2>系统日志</h2>
+
+  <div class="msg-warn">ⓘ 日志仅存本机（含员工姓名与工时等敏感信息），不外传、不上报。</div>
+
+  <div class="filter-top">
+    <div class="field">
+      <label>时间范围 起</label>
+      <div id="lgStartBox" class="ym"></div>
+      <input type="hidden" id="lgStart" value="">
+    </div>
+    <div class="field">
+      <label>时间范围 止</label>
+      <div id="lgEndBox" class="ym"></div>
+      <input type="hidden" id="lgEnd" value="">
+    </div>
+    <button id="btnQuery">查询</button>
+  </div>
+
+  <div class="filter-divider"></div>
+
+  <div class="row">
+    <div class="field">
+      <label>级别</label>
+      <select id="lgLevel">
+        <option value="">全部</option>
+        <option value="INFO">INFO</option>
+        <option value="WARNING">WARNING</option>
+        <option value="ERROR">ERROR</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>类别</label>
+      <select id="lgCategory">
+        <option value="">全部</option>
+        <option value="query">查询</option>
+        <option value="import">导入</option>
+        <option value="export">导出</option>
+        <option value="quality">质量</option>
+        <option value="system">系统</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>关键词</label>
+      <input type="text" id="lgKeyword" placeholder="匹配操作 / 对象 / 消息">
+    </div>
+    <div class="field">
+      <label>成败</label>
+      <select id="lgOk">
+        <option value="">全部</option>
+        <option value="ok">成功</option>
+        <option value="fail">失败</option>
+      </select>
+    </div>
+    <button class="secondary" id="btnExport">导出 CSV</button>
+    <span class="spinner" id="lgMsg"></span>
+  </div>
+
+  <p class="hint">ⓘ 时间范围用「年 + 月」选择，留空（任意）表示不限；级别 / 类别 / 成败下拉留「全部」表示不限；关键词按「包含」匹配操作、对象与消息。默认按时间倒序，点击带 <b>▸</b> 的行可展开查看异常堆栈。</p>
+</section>
+
+<section class="panel">
+  <div id="logResult"></div>
+  <div class="row" id="logPager"></div>
+</section>
+{% endblock %}
+{% block scripts %}<script>window.ECA.initLogs();</script>{% endblock %}
