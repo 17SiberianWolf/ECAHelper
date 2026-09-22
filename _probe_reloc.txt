@@ -1,6 +1,0 @@
-copying runtime -> DST (simulating a different machine path)...
-copied OK
-relocated import rc: 1
-PREFIX C:\Users\Administrator\Desktop\_rt_probe\python
-flask 3.1.3
-relocated_prefix_follows_exe: False

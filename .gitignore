@@ -24,3 +24,8 @@ dist/
 # 临时 / 日志
 *.log
 _cleanup*
+_probe*
+_st.txt
+_dbg*
+_junk*
+_finalize*
