@@ -2,8 +2,17 @@
 {% set active = 'search' %}
 {% block content %}
 <section class="panel">
-  <h2>综合检索</h2>
-  <div class="row">
+  <div class="title-row">
+    <h2>综合检索</h2>
+    <div class="quick">
+      <button data-q="thisyear">今年</button>
+      <button data-q="lastyear">去年</button>
+      <button data-q="all">全部</button>
+      <button data-q="quarter">当前季</button>
+    </div>
+  </div>
+
+  <div class="filter-top">
     <div class="field">
       <label>报告月份 起</label>
       <div id="sStartBox" class="ym"></div>
@@ -16,47 +25,50 @@
       <input type="hidden" id="sEnd" value="{{ month_hi or '' }}">
       <input type="hidden" id="sHi" value="{{ month_hi or '' }}">
     </div>
+    <button id="btnQuery">查询</button>
+  </div>
+
+  <div class="filter-divider"></div>
+
+  <div class="filter-grid">
     <div class="field">
-      <label>组织（可搜索）</label>
+      <div class="field-head">
+        <label>组织</label>
+        <label class="chk-inline"><input type="checkbox" id="incSub" checked> 含下级</label>
+      </div>
       <div id="orgSelBox" class="ss"></div>
       <input type="hidden" id="orgSel">
-      <label class="chk-inline"><input type="checkbox" id="incSub" checked> 含下级</label>
     </div>
     <div class="field">
-      <label>成本中心（可搜索）</label>
+      <label>成本中心</label>
       <div id="ccSelBox" class="ss"></div>
       <input type="hidden" id="ccSel">
     </div>
     <div class="field">
-      <label>任务类别（可搜索/可输入）</label>
+      <label>任务类别</label>
       <div id="taskSelBox" class="ss"></div>
       <input type="hidden" id="taskSel">
     </div>
     <div class="field">
-      <label>人员（可搜索）</label>
+      <label>人员</label>
       <div id="personSelBox" class="ss"></div>
       <input type="hidden" id="personSel">
     </div>
     <div class="field">
-      <label>项目（可搜索/按父项目号）</label>
+      <label>项目</label>
       <div id="projectSelBox" class="ss"></div>
       <input type="hidden" id="projectSel">
     </div>
     <div class="field">
-      <label><input type="checkbox" id="incEmpty"> 含空项目号行</label>
+      <label>含空项目号行</label>
+      <label class="chk-cell"><input type="checkbox" id="incEmpty"> 包含无项目号的记录</label>
     </div>
   </div>
-  <p class="hint">ⓘ 下拉项后的 <b>N 行</b> = 在当前其他条件下该取值能命中的行数；<b>零行项不出现</b>，因此不会选到空组合。「含下级」默认开启：选 <code>EA</code> 即整个 EA 部门（含 EAR/EAI/EAP…）。任务支持关键字过滤与列表外输入（按「包含」匹配）。</p>
-  <div class="quick">
-    <button data-q="thisyear">今年</button>
-    <button data-q="lastyear">去年</button>
-    <button data-q="all">全部</button>
-    <button data-q="quarter">当前季</button>
-  </div>
-  <div class="row" style="margin-top:12px">
-    <button id="btnQuery">查询</button>
+
+  <div class="opt-row">
     <button class="secondary" id="btnFacets">刷新候选计数</button>
     <span class="spinner" id="sMsg"></span>
+    <span class="hint">ⓘ 下拉项后的 <b>N 行</b> = 在当前其他条件下该取值能命中的行数；<b>零行项不出现</b>，不会选到空组合。「含下级」默认开启：选 <code>EA</code> 即整个 EA 部门（含 EAR/EAI/EAP…）。任务支持关键字过滤与列表外输入（按「包含」匹配）。</span>
   </div>
 </section>
 

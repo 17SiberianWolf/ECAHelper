@@ -204,3 +204,36 @@ details.fold { margin-top: 10px; border: 1px dashed var(--line); border-radius: 
 details.fold > summary { cursor: pointer; user-select: none; color: var(--ink); font-weight: 600; font-size: 13px; }
 details.fold[open] > summary { margin-bottom: 4px; }
 details.fold code { background: var(--chip); padding: 0 4px; border-radius: 3px; }
+
+/* ---------- 综合检索 布局优化（分组卡片 + 响应式网格） ---------- */
+.title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.title-row h2 { margin: 0; }
+.title-row .quick { margin-top: 0; }
+
+.filter-top { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+.filter-top .field { flex: 0 0 auto; }
+.filter-top #btnQuery { margin-left: auto; }
+
+.filter-divider { border-top: 1px dashed var(--line); margin: 16px 0; }
+
+.filter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 18px; }
+.field-head { display: flex; align-items: center; justify-content: space-between; }
+.field-head .chk-inline { margin-top: 0; }
+
+.chk-cell {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #fafbfc; border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 12px; font-size: 12px; color: var(--ink);
+  margin-top: 2px; cursor: pointer;
+}
+
+.opt-row { display: flex; align-items: center; gap: 14px; margin-top: 16px; flex-wrap: wrap; }
+.opt-row .hint { margin: 0; flex: 1 1 auto; }
+
+@media (max-width: 860px) {
+  .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .filter-grid { grid-template-columns: 1fr; }
+  .filter-top #btnQuery { margin-left: 0; }
+}
