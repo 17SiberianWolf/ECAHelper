@@ -4,6 +4,7 @@
     get_connection(db_path=None) -> sqlite3.Connection
     init_schema(conn)                        -- 建表/索引（幂等）
     ensure_db()                             -- 确保库文件存在并建表，返回路径
+    is_empty(db_path=None) -> bool          -- 库是否无明细数据（自举判定用）
 
 连接统一开启 FOREIGN_KEYS 与行工厂（sqlite3.Row），便于按列名访问。
 """
@@ -62,3 +63,25 @@ def reset_db(db_path: str | Path | None = None) -> Path:
     if path.exists():
         path.unlink()
     return ensure_db(path)
+
+
+def is_empty(db_path: str | Path | None = None) -> bool:
+    """判断数据库是否为空（无明细数据）。
+
+    先 ``ensure_db`` 保证库文件与 schema 就绪（幂等），再统计核心明细表
+    ``timesheet_record`` 的行数；为 0（或表缺失）即视为空库。
+    供启动自举判定使用。
+    """
+    path = ensure_db(db_path)
+    conn = get_connection(path)
+    try:
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT COUNT(*) AS n FROM timesheet_record")
+            row = cur.fetchone()
+        except sqlite3.OperationalError:
+            # 极端情况下（schema 未建成）也按空库处理，交由自举流程重建
+            return True
+        return (row["n"] if row is not None else 0) == 0
+    finally:
+        conn.close()
