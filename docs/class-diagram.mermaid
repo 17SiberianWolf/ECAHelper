@@ -1,0 +1,118 @@
+classDiagram
+  class ImportBatch {
+    +str id PK
+    +str source_file
+    +str parsed_month
+    +str imported_at
+    +int row_count
+    +int anomaly_count
+    +int duplicate_count
+    +str status
+    +str note
+  }
+  class Person {
+    +str resource_id_norm PK
+    +str canonical_name
+    +str name_aliases
+    +str first_organization
+    +str first_cost_center
+    +str first_seen_batch
+    +str merged_into
+  }
+  class TimesheetRecord {
+    +int id PK
+    +str import_batch_id
+    +str resource_id_norm
+    +str resource_id_raw
+    +str name_snapshot
+    +str organization
+    +str cost_center
+    +str wh_cost_center
+    +str project_id_norm
+    +str project_id_raw
+    +str project_name
+    +str task
+    +str wbs_nr
+    +str to_wbs_no
+    +str to_cost_center
+    +str to_internal_order
+    +str to_reference_proj_no
+    +str reference_proj_name
+    +float actuals_total_h
+    +str actuals_raw_text
+    +str transaction_group
+    +str site_type
+    +str report_month
+    +str source_file
+    +str source_sheet
+    +int source_row
+    +int is_duplicate
+    +str dup_group_key
+    +int is_anomaly_actuals
+  }
+  class Exclusion {
+    +int id PK
+    +str category
+    +str target_key
+    +int excluded
+    +str created_at
+  }
+  class PersonMerge {
+    +int id PK
+    +str from_resource_id_norm
+    +str to_resource_id_norm
+    +str created_at
+    +str note
+  }
+  class Normalizer {
+    +str normalize_resource_id(raw)
+    +str normalize_project_id(raw)
+    +str normalize_name(raw)
+    +str parse_month(filename)
+  }
+  class ExcelLocator {
+    +tuple locate_data_sheet(wb)
+    +str detect_version(headers)
+  }
+  class FieldMapper {
+    +dict build_column_map(header_row)
+  }
+  class Importer {
+    +ImportReport import_files(paths)
+    +str resolve_idempotency(source_file)
+  }
+  class Aggregator {
+    +dict aggregate_three_layer(filter)
+    +list wbs_drill(project, prefix)
+    +list top_n(dim, n)
+    +list monthly_trend(filter)
+  }
+  class Exporter {
+    +path export_excel(rows, lang)
+    +path export_csv(rows, lang)
+  }
+  class QualityService {
+    +dict metrics()
+    +list detail(category, key)
+  }
+  class PersonService {
+    +list aliases(rid)
+    +void merge(from, to)
+  }
+
+  TimesheetRecord "n" --> "1" ImportBatch : import_batch_id
+  TimesheetRecord "n" --> "1" Person : resource_id_norm
+  Exclusion "n" ..> "1" TimesheetRecord : target_key
+  PersonMerge "n" ..> "1" Person : from/to
+  Importer ..> ImportBatch
+  Importer ..> TimesheetRecord
+  Importer ..> Normalizer
+  Importer ..> ExcelLocator
+  Importer ..> FieldMapper
+  Aggregator ..> TimesheetRecord
+  Aggregator ..> Exclusion
+  Exporter ..> Aggregator
+  QualityService ..> TimesheetRecord
+  QualityService ..> Exclusion
+  PersonService ..> Person
+  PersonService ..> PersonMerge

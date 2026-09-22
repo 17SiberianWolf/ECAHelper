@@ -1,0 +1,21 @@
+# 项目内部目录（记忆/配置，不入库）
+.workbuddy/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 虚拟环境
+.venv/
+venv/
+
+# 运行时生成的数据库与导出（含员工隐私工时数据）
+eca_helper.db
+data/
+
+# 原始输入工时表（含员工隐私，体积大，不入库）
+OriginSource/
+
+# 临时 / 日志
+*.log
+_cleanup*

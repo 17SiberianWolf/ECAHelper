@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% set active = 'import' %}
+{% block content %}
+<section class="panel">
+  <h2>数据导入</h2>
+  <p class="muted">数据目录：<code>{{ origin_dir }}</code></p>
+  <p class="muted">导入会扫描目录下全部 <code>.xlsx</code>（自动跳过 <code>~$</code> 锁文件与在管项目主数据），
+     按月文件名解析报告月份，执行去重/异常标记，并维护人员表。同名文件默认跳过（幂等）。</p>
+  <div class="row">
+    <button id="btnImport">开始导入（全部文件）</button>
+    <span class="spinner hidden" id="importSpin"></span>
+  </div>
+  <div id="importResult" class="layer" style="margin-top:14px"></div>
+</section>
+{% endblock %}
+{% block scripts %}<script>window.ECA.initImport();</script>{% endblock %}

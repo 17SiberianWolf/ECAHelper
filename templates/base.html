@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ECAHelper 工时统计分析{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">ECAHelper <span class="sub">· 工时统计分析</span></div>
+    <nav>
+      <a href="/" class="{{ 'active' if active == 'import' else '' }}">导入</a>
+      <a href="/project" class="{{ 'active' if active == 'project' else '' }}">项目工时</a>
+      <a href="/employee" class="{{ 'active' if active == 'employee' else '' }}">员工工时</a>
+      <a href="/search" class="{{ 'active' if active == 'search' else '' }}">综合检索</a>
+      <a href="/quality" class="{{ 'active' if active == 'quality' else '' }}">数据质量</a>
+    </nav>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">ECAHelper · 本地离线 Web 应用 · Flask + SQLite</footer>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

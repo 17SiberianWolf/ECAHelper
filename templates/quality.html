@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% set active = 'quality' %}
+{% block content %}
+<section class="panel">
+  <h2>数据质量面板</h2>
+  <p class="muted">统计默认包含全部原始行（保留标记、不删除）。勾选下列类别可将对应行从统计中排除并持久化。</p>
+  <div class="row">
+    <label class="tag grey"><input type="checkbox" data-excl="duplicate"> 排除重复行</label>
+    <label class="tag grey"><input type="checkbox" data-excl="anomaly"> 排除异常行（Actuals 日期型）</label>
+    <label class="tag grey"><input type="checkbox" data-excl="zero"> 排除 0 工时行</label>
+    <label class="tag grey"><input type="checkbox" data-excl="empty_rid"> 排除空资源号行</label>
+  </div>
+  <div id="qSummary" style="margin-top:12px"></div>
+</section>
+
+<section class="panel">
+  <h2>明细下钻</h2>
+  <div class="row">
+    <div class="field">
+      <label>类别</label>
+      <select id="qCat">
+        <option value="duplicate">重复行</option>
+        <option value="anomaly">异常行</option>
+        <option value="zero">0 工时行</option>
+        <option value="empty_rid">空资源号行</option>
+      </select>
+    </div>
+    <button id="btnDetail">查看明细（最多 500）</button>
+  </div>
+  <div id="qDetail" style="margin-top:12px"></div>
+</section>
+{% endblock %}
+{% block scripts %}<script>window.ECA.initQuality();</script>{% endblock %}

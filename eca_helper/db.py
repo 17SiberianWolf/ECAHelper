@@ -1,0 +1,62 @@
+"""SQLite 连接管理与 schema 初始化。
+
+提供：
+    get_connection(db_path=None) -> sqlite3.Connection
+    init_schema(conn)                        -- 建表/索引（幂等）
+    ensure_db()                             -- 确保库文件存在并建表，返回路径
+
+连接统一开启 FOREIGN_KEYS 与行工厂（sqlite3.Row），便于按列名访问。
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+from config import DB_PATH
+
+_SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
+
+
+def get_connection(db_path: str | Path | None = None) -> sqlite3.Connection:
+    """返回一个新的 SQLite 连接。
+
+    db_path 为 None 时使用 config.DB_PATH（项目根目录 eca_helper.db）。
+    连接开启外键约束，并使用 Row 工厂。
+    """
+    path = str(db_path) if db_path is not None else str(DB_PATH)
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def init_schema(conn: sqlite3.Connection) -> None:
+    """执行 schema.sql 建表/索引（CREATE TABLE IF NOT EXISTS，幂等）。"""
+    sql = _SCHEMA_PATH.read_text(encoding="utf-8")
+    conn.executescript(sql)
+    conn.commit()
+
+
+def ensure_db(db_path: str | Path | None = None) -> Path:
+    """确保数据库文件存在并完成建表，返回其路径。"""
+    path = Path(db_path) if db_path is not None else DB_PATH
+    path = path.resolve()
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    conn = get_connection(path)
+    try:
+        init_schema(conn)
+    finally:
+        conn.close()
+    return path
+
+
+def reset_db(db_path: str | Path | None = None) -> Path:
+    """删除并重建数据库（仅用于测试/重置）。"""
+    path = Path(db_path) if db_path is not None else DB_PATH
+    path = path.resolve()
+    if path.exists():
+        path.unlink()
+    return ensure_db(path)

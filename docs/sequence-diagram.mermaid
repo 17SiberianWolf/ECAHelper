@@ -1,0 +1,63 @@
+sequenceDiagram
+  actor User
+  participant UI as Import Page
+  participant API as /api/import
+  participant Imp as Importer
+  participant Loc as ExcelLocator
+  participant Norm as Normalizer
+  participant DB as SQLite
+  User->>UI: 选择目录/文件
+  UI->>API: POST 文件列表
+  API->>Imp: import_files(paths)
+  loop 每个 .xlsx（跳过 ~$ / 主数据）
+    Imp->>Loc: locate_data_sheet(wb)
+    Loc-->>Imp: (sheet, header_row, column_map, version)
+    Imp->>Norm: parse_month(filename)
+    Norm-->>Imp: YYYY-MM
+    Imp->>Imp: resolve_idempotency(source_file) → skip/overwrite/copy
+    Imp->>Norm: normalize 每行(rid/pid/name)
+    Imp->>Imp: 行 hash → 标记 is_duplicate
+    Imp->>Imp: 检测 datetime actuals → is_anomaly
+    Imp->>DB: 批量 INSERT import_batch + timesheet_record
+  end
+  Imp-->>API: ImportReport(新增行/跳过/标记)
+  API-->>UI: 报告 + 跳转质量面板
+
+---
+
+sequenceDiagram
+  actor User
+  participant UI as Query Page
+  participant API as /api/query
+  participant Agg as Aggregator
+  participant Exc as Exclusion
+  participant DB as SQLite
+  User->>UI: 项目号/人员 + 区间 + 过滤
+  UI->>API: POST filter
+  API->>Agg: aggregate_three_layer(filter)
+  Agg->>Exc: 载入 active exclusions
+  Agg->>DB: 层1 总计 WHERE filter AND not excluded
+  Agg->>DB: 层2 按月 GROUP BY report_month
+  Agg->>DB: 层3 按人 GROUP BY resource_id_norm
+  Agg->>DB: WBS 下一级 drill
+  Agg-->>API: {total, by_month, by_person, wbs}
+  API-->>UI: 三层渲染 + 图表数据
+
+---
+
+sequenceDiagram
+  actor User
+  participant UI as Result Page
+  participant API as /api/export
+  participant Exp as Exporter
+  participant Agg as Aggregator
+  participant DB as SQLite
+  User->>UI: 点击导出 Excel/CSV
+  UI->>API: POST(filter, format, lang)
+  API->>Agg: 复用相同 filter 取明细行
+  Agg->>DB: SELECT 明细 WHERE filter
+  Agg-->>Exp: rows
+  Exp->>Exp: 套用双语表头映射(config.BILINGUAL)
+  Exp->>DB: 写 xlsx(openpyxl) / csv
+  Exp-->>API: file path
+  API-->>UI: 下载链接

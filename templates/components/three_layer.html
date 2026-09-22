@@ -1,0 +1,58 @@
+{# 可复用三层结果块：总计 / 按月 / 按人（或按项目） #}
+{# 用法：{% from "components/three_layer.html" import three_layer %} #}
+{#       {{ three_layer(result, person_key="resource_id_norm", person_label="人员") }} #}
+
+{% macro three_layer(result, person_key="resource_id_norm", person_label="人员", show_project=True) %}
+<div class="layer">
+  <div class="cards">
+    <div class="card">
+      <div class="k">总工时 (h)</div>
+      <div class="v">{{ "%.1f"|format(result.total.total_h or 0) }}</div>
+    </div>
+    <div class="card">
+      <div class="k">明细行数</div>
+      <div class="v">{{ result.total.rows or 0 }}</div>
+    </div>
+    <div class="card">
+      <div class="k">{{ person_label }}数</div>
+      <div class="v">{{ result.total.persons or 0 }}</div>
+    </div>
+    <div class="card">
+      <div class="k">覆盖月份</div>
+      <div class="v small">{{ result.total.months or 0 }}</div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:14px">按月趋势</h3>
+  <table>
+    <thead><tr><th>月份</th><th class="num">工时(h)</th><th class="num">行数</th></tr></thead>
+    <tbody>
+      {% for m in result.by_month %}
+      <tr><td>{{ m.month }}</td><td class="num">{{ "%.1f"|format(m.h or 0) }}</td><td class="num">{{ m.rows }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if show_project and result.by_project is defined %}
+  <h3 style="margin-top:14px">按项目</h3>
+  <table>
+    <thead><tr><th>项目号</th><th>项目名称</th><th class="num">工时(h)</th><th class="num">行数</th></tr></thead>
+    <tbody>
+      {% for p in result.by_project %}
+      <tr><td>{{ p.key }}</td><td>{{ p.name }}</td><td class="num">{{ "%.1f"|format(p.h or 0) }}</td><td class="num">{{ p.rows }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <h3 style="margin-top:14px">按{{ person_label }}</h3>
+  <table>
+    <thead><tr><th>{{ person_label }}标识</th><th>名称</th><th class="num">工时(h)</th><th class="num">行数</th></tr></thead>
+    <tbody>
+      {% for p in result.by_person %}
+      <tr><td>{{ p.key }}</td><td>{{ p.name }}</td><td class="num">{{ "%.1f"|format(p.h or 0) }}</td><td class="num">{{ p.rows }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}

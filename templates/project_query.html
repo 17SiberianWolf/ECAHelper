@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% set active = 'project' %}
+{% block content %}
+<section class="panel">
+  <h2>项目工时查询</h2>
+  <div class="row">
+    <div class="field">
+      <label>项目号</label>
+      <select id="projectId"></select>
+    </div>
+    <div class="field">
+      <label>报告月份 起</label>
+      <input type="month" id="pStart" value="{{ month_lo or '' }}">
+      <input type="hidden" id="pLo" value="{{ month_lo or '' }}">
+    </div>
+    <div class="field">
+      <label>报告月份 止</label>
+      <input type="month" id="pEnd" value="{{ month_hi or '' }}">
+      <input type="hidden" id="pHi" value="{{ month_hi or '' }}">
+    </div>
+    <div class="field">
+      <label>WBS 下钻前缀</label>
+      <input type="text" id="wbsPrefix" placeholder="留空=第一级">
+    </div>
+  </div>
+  <div class="quick">
+    <button data-q="thisyear">今年</button>
+    <button data-q="lastyear">去年</button>
+    <button data-q="all">全部</button>
+    <button data-q="quarter">当前季</button>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <button id="btnQuery">查询</button>
+    <span class="spinner" id="pMsg"></span>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="tabs">
+    <button data-tab="res" class="active">三层结果</button>
+    <button data-tab="chart">图表</button>
+  </div>
+  <div id="result"></div>
+  <div id="chartArea" class="hidden">
+    <h3>按月趋势</h3>
+    <div class="chart-wrap" id="chartTrend"></div>
+    <h3>人员 Top N</h3>
+    <div class="row" style="margin:6px 0">
+      <select id="topnDim">
+        <option value="person">按人员</option>
+        <option value="project">按项目</option>
+        <option value="org">按组织</option>
+        <option value="cost_center">按成本中心</option>
+      </select>
+      <select id="topnN">
+        <option>5</option><option selected>10</option><option>20</option><option>50</option>
+      </select>
+    </div>
+    <div class="chart-wrap" id="chartTopn"></div>
+    <h3>人员 × 项目 交叉矩阵</h3>
+    <div class="chart-wrap" id="chartMatrix"></div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>导出</h2>
+  <div class="row">
+    <div class="field"><label>格式</label>
+      <select id="expFmt"><option value="xlsx">Excel</option><option value="csv">CSV</option></select></div>
+    <div class="field"><label>语言</label>
+      <select id="expLang"><option value="both">中英</option><option value="en">EN</option><option value="zh">中文</option></select></div>
+    <button class="secondary" id="btnExport">导出当前查询</button>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script>window.ECA.initProject();</script>{% endblock %}
