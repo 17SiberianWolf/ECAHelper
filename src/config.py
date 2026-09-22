@@ -143,6 +143,7 @@ BILINGUAL = {
     "organization": ("Organization", "组织"),
     "cost_center": ("Cost Center", "成本中心"),
     "project_id_norm": ("Project ID", "项目号"),
+    "project_id_raw": ("Project ID (raw)", "原始项目号"),
     "project_name": ("Project", "项目名称"),
     "task": ("Task", "任务"),
     "wbs_nr": ("WBS Nr", "WBS 编号"),
@@ -152,6 +153,7 @@ BILINGUAL = {
 }
 
 # 导出列顺序（含上述内部字段；task_zh 为可选业务枚举中文映射列，见 Q7）
+# 第二轮：在 project_id_norm（父号主列）之后插入 project_id_raw（原始项目号，既有列，不新增 DB 列）。
 EXPORT_COLUMNS = [
     "report_month",
     "resource_id_norm",
@@ -159,6 +161,7 @@ EXPORT_COLUMNS = [
     "organization",
     "cost_center",
     "project_id_norm",
+    "project_id_raw",
     "project_name",
     "task",
     "task_zh",
@@ -178,6 +181,10 @@ BUSINESS_ENUM_ZH = {
 
 # 质量面板排除类别
 EXCLUSION_CATEGORIES = ("duplicate", "anomaly", "zero", "empty_rid")
+
+# 脏数据「可疑」判定：项目号形如日期（如 '2092-12-08 00:00:00'）。
+# 仅用于标记（项目下拉徽标 / 质量面板），不删不改，工时仍计入红线守恒（问题 8 / AC-08-1）。
+SUSPICIOUS_PROJECT_PATTERN = r"^\d{4}-\d{2}-\d{2}"
 
 # 导出文件命名约定（决策 +3）：导出_<类型>_<YYYYMMDD_HHMM>.<xlsx|csv>
 EXPORT_PREFIX = "导出"

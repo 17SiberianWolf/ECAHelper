@@ -23,6 +23,7 @@ from config import (
 from eca_helper.db import get_connection
 from eca_helper.queries.aggregate import (
     EXCLUSION_SQL,
+    PROJECT_BASE_SQL,
     QueryFilter,
     _base_where,
     _empty_project_cond,
@@ -37,12 +38,26 @@ def _select_columns() -> list[str]:
 
 
 def fetch_rows(conn, f: QueryFilter) -> list[dict]:
-    """按筛选条件取明细行（含排除条款）。"""
+    """按筛选条件取明细行（含排除条款）。
+
+    导出列**按列定制**（决策 9 / §5.4）：
+      - `project_id_norm` -> PROJECT_BASE_SQL AS project_id_norm（**父号主列**，归并口径）
+      - `project_id_raw`  -> r.project_id_raw AS project_id_raw（**原始项目号**，既有列）
+      - 其余 -> f"r.{c}"
+    父号列与原始号列**同一行并存**（不新增 DB 列）。
+    """
     params: dict = {}
     where = _base_where(f, params) + _empty_project_cond(f)
-    cols = _select_columns()
+    exprs: list[str] = []
+    for c in _select_columns():  # _select_columns() 已剔除派生列 task_zh
+        if c == "project_id_norm":
+            exprs.append(PROJECT_BASE_SQL + " AS project_id_norm")
+        elif c == "project_id_raw":
+            exprs.append("r.project_id_raw AS project_id_raw")
+        else:
+            exprs.append(f"r.{c}")
     sql = (
-        "SELECT " + ", ".join(f"r.{c}" for c in cols)
+        "SELECT " + ", ".join(exprs)
         + " FROM timesheet_record r WHERE 1=1 " + EXCLUSION_SQL + where
         + " ORDER BY r.report_month, r.source_file, r.source_row"
     )

@@ -73,11 +73,8 @@
       }));
 
     if (result.by_project) {
-      html += sectionTitle("按项目明细", true);
-      html += table(["项目号", "项目名称", "工时(h)", "行数"],
-        result.by_project.map(function (p) {
-          return [p.key, p.name || "", right(fmtH(p.h)), right(p.rows)];
-        }));
+      html += sectionTitle("按项目明细（点击父项目号展开子项目）", true);
+      html += projectTable(result.by_project, opts);
     }
 
     if (result.non_project) {
@@ -125,6 +122,69 @@
     return '<table>' + h + b + "</table>";
   }
   function right(s) { return '<span class="num">' + s + "</span>"; }
+
+  /* ---------- 「按项目」表：父项目号可展开 → 子项目号明细（US-R2-04 / AC-02-4） ----------
+   * 每行父号带展开开关，紧随其后是占位 child-row（默认 .hidden，首次展开时懒加载）。 */
+  function projectTable(rows, opts) {
+    var start = (opts && opts.start) || "";
+    var end = (opts && opts.end) || "";
+    var h = "<thead><tr><th>项目号</th><th>项目名称</th>" +
+      "<th class='num'>工时(h)</th><th class='num'>行数</th></tr></thead><tbody>";
+    (rows || []).forEach(function (p) {
+      var key = p.key == null ? "" : String(p.key);
+      h += "<tr>" +
+        "<td><span class='proj-toggle' data-proj-expand data-pid='" + escAttr(key) +
+          "' data-start='" + escAttr(start) + "' data-end='" + escAttr(end) + "' data-loaded='0'>" +
+          "<span class='arrow'>▶</span>" + escText(key) + "</span></td>" +
+        "<td>" + escText(p.name || "") + "</td>" +
+        "<td class='num'>" + fmtH(p.h) + "</td>" +
+        "<td class='num'>" + (p.rows == null ? "" : p.rows) + "</td>" +
+      "</tr>" +
+      "<tr class='child-row hidden'><td class='child-cell' colspan='4'></td></tr>";
+    });
+    return "<table class='proj-table'>" + h + "</tbody></table>";
+  }
+
+  function loadProjChildren(toggle, cell) {
+    toggle.setAttribute("data-loaded", "1");
+    var pid = toggle.getAttribute("data-pid");
+    var start = toggle.getAttribute("data-start");
+    var end = toggle.getAttribute("data-end");
+    if (!start || !end) { cell.innerHTML = '<div class="muted">缺少月份区间，无法下钻。</div>'; return; }
+    cell.innerHTML = '<div class="muted">加载中…</div>';
+    api("/api/query/project/children?project_id=" + encodeURIComponent(pid) +
+        "&start=" + encodeURIComponent(start) + "&end=" + encodeURIComponent(end), "GET")
+      .then(function (d) {
+        var kids = (d && d.children) || [];
+        if (!kids.length) {
+          cell.innerHTML = '<div class="muted">该项目号名下无子项目号明细。</div>';
+          return;
+        }
+        var s = "<table class='child-table'><thead><tr><th>子项目号</th><th>项目名称</th>" +
+          "<th class='num'>工时(h)</th><th class='num'>行数</th></tr></thead><tbody>";
+        kids.forEach(function (k) {
+          s += "<tr><td>" + escText(k.key || "") + "</td><td>" + escText(k.name || "") +
+            "</td><td class='num'>" + fmtH(k.h) + "</td><td class='num'>" + (k.rows || 0) + "</td></tr>";
+        });
+        s += "</tbody></table>";
+        cell.innerHTML = s;
+      })
+      .catch(function (e) { cell.innerHTML = '<div class="msg-error">' + e.message + "</div>"; });
+  }
+
+  /* 项目号展开（事件委托）：child-row 可见性一律走 ECA.toggleEl（classList），懒加载一次。 */
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest("[data-proj-expand]");
+    if (!t) return;
+    var tr = t.closest("tr");
+    var childRow = tr ? tr.nextElementSibling : null;
+    if (!childRow || !childRow.classList.contains("child-row")) return;
+    var open = t.classList.toggle("open");
+    ECA.toggleEl(childRow, open);
+    if (open && t.getAttribute("data-loaded") === "0") {
+      loadProjChildren(t, childRow.querySelector(".child-cell"));
+    }
+  });
 
   /* 折叠交互（事件委托）：统一用 classList（.collapsed）控制表体可见性，避免内联 display。 */
   document.addEventListener("click", function (e) {
@@ -354,7 +414,17 @@
       api("/api/query/project", "POST", { project_id: pid, start: start, end: end, wbs_prefix: el("wbsPrefix") ? el("wbsPrefix").value : "" })
         .then(function (r) {
           setMsg(el("pMsg"), "", null);
-          renderThreeLayer(el("result"), r, { personLabel: "人员" });
+          // 项目页：把查询的父项目号作为「按项目」表的一行（可展开看子项目号明细）。
+          // 接口 total 已按父号子树聚合，故该行 = 整棵子树合计（AC-02-3 / AC-02-4）。
+          if (!r.by_project) {
+            r.by_project = [{
+              key: r.project_id || pid,
+              name: r.project_name || "",
+              h: (r.total || {}).total_h || 0,
+              rows: (r.total || {}).rows || 0,
+            }];
+          }
+          renderThreeLayer(el("result"), r, { personLabel: "人员", start: start, end: end });
           renderCharts("project", { start: start, end: end, project_id: pid });
         })
         .catch(function (e) { setMsg(el("pMsg"), e.message, "error"); });
@@ -398,7 +468,7 @@
       api("/api/query/employee", "POST", { resource_id: rid, q: q, start: start, end: end })
         .then(function (r) {
           setMsg(el("eMsg"), "", null);
-          renderThreeLayer(el("result"), r, { cardMode: "employee" });
+          renderThreeLayer(el("result"), r, { cardMode: "employee", start: start, end: end });
           renderCharts("employee", { start: start, end: end, resource_id: r.resource_id });
         })
         .catch(function (e) { setMsg(el("eMsg"), e.message, "error"); });
@@ -461,7 +531,7 @@
       api("/api/query/search", "POST", payload)
         .then(function (r) {
           setMsg(el("sMsg"), "", null);
-          renderThreeLayer(el("result"), r, {});
+          renderThreeLayer(el("result"), r, { start: start, end: end });
           renderCharts("search", { start: start, end: end });
         })
         .catch(function (e) { setMsg(el("sMsg"), e.message, "error"); });

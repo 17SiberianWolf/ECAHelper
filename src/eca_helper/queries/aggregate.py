@@ -15,9 +15,11 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
+from config import SUSPICIOUS_PROJECT_PATTERN
 from eca_helper.parsers import normalizer
 
 # 统一排除条款（Q3：默认 exclusion 表为空 → 不影响任何行）
@@ -30,6 +32,33 @@ AND NOT EXISTS (
     OR (e.category='empty_rid' AND e.target_key = r.source_file || '|' || r.source_row)
   )
 )"""
+
+# ---------------------------------------------------------------------------
+# 项目号父/子归并 —— 唯一真源（系统设计书 §5.1）。
+#
+# 规则：取第 2 个 '.' 之前的字符；不足 2 个点则原样保留。
+#   O 1100.036.01.01.0028 -> O 1100.036
+#   O 1100.033.01         -> O 1100.033
+#   0.0001 / OE1323.172 / 70463 -> 原样保留
+#
+# 该表达式已对全部 1,552 个项目号与 Python 规则逐条比对，0 偏差。
+# 别名必须为 `r`（timesheet_record 的查询别名）；全项目只此一处定义，
+# 其余处一律引用本常量，禁止重复拼接字面量。
+# ---------------------------------------------------------------------------
+PROJECT_BASE_SQL = (
+    "CASE WHEN instr(substr(r.project_id_norm, instr(r.project_id_norm,'.')+1), '.') > 0 "
+    "THEN substr(r.project_id_norm, 1, instr(r.project_id_norm,'.') "
+    "+ instr(substr(r.project_id_norm, instr(r.project_id_norm,'.')+1), '.') - 1) "
+    "ELSE r.project_id_norm END"
+)
+
+# 脏数据「可疑」判定用（问题 8 / AC-08-3）：项目号形如日期。
+_SUSPICIOUS_RE = re.compile(SUSPICIOUS_PROJECT_PATTERN)
+
+
+def _is_suspicious_project(pid: Optional[str]) -> bool:
+    """项目号是否为日期型脏数据（仅标记，不删不改）。"""
+    return bool(pid) and bool(_SUSPICIOUS_RE.match(str(pid)))
 
 
 @dataclass
@@ -80,7 +109,9 @@ def _base_where(f: QueryFilter, params: dict) -> str:
         conds.append("r.resource_id_norm = :resource_id")
         params["resource_id"] = f.resource_id
     if f.project_id:
-        conds.append("r.project_id_norm = :project_id")
+        # 按父项目号过滤（归并口径）：匹配该父号名下整棵子树（§5.2 #1）。
+        # 注意：本函数末尾统一前缀 " AND "，此处不得再加前导 AND，否则双 AND 语法错。
+        conds.append(PROJECT_BASE_SQL + " = :project_id")
         params["project_id"] = f.project_id
     return (" AND " + " AND ".join(conds)) if conds else ""
 
@@ -138,7 +169,7 @@ def aggregate_project(conn, project_id: str, start: str, end: str,
                       wbs_prefix: str = "") -> dict:
     """按项目号聚合：总计 / 按月 / 按人 / WBS 下一级。"""
     params = {"pid": project_id, "m_start": start, "m_end": end}
-    where = " AND r.project_id_norm = :pid AND r.report_month BETWEEN :m_start AND :m_end"
+    where = " AND " + PROJECT_BASE_SQL + " = :pid AND r.report_month BETWEEN :m_start AND :m_end"
     total, by_month, by_person = _three_layer(conn, where, params)
     wbs = wbs_drill(conn, project_id, wbs_prefix, start, end)
     return {
@@ -158,7 +189,7 @@ def wbs_drill(conn, project_id: str, prefix: str, start: str, end: str) -> list[
     cur = conn.cursor()
     cur.execute(
         "SELECT r.wbs_nr AS wbs, COALESCE(SUM(r.actuals_total_h),0) AS h, COUNT(*) AS rows "
-        "FROM timesheet_record r WHERE r.project_id_norm = :pid "
+        "FROM timesheet_record r WHERE " + PROJECT_BASE_SQL + " = :pid "
         "AND r.wbs_nr IS NOT NULL AND r.report_month BETWEEN :m_start AND :m_end "
         + like_cond + EXCLUSION_SQL + " GROUP BY r.wbs_nr",
         params,
@@ -186,13 +217,13 @@ def aggregate_employee(conn, resource_id: str, start: str, end: str) -> dict:
     total, by_month, _ = _three_layer(conn, where_all, params)
 
     cur = conn.cursor()
-    # 按项目（排除空项目号）
+    # 按项目（排除空项目号；项目号按父号归并 §5.2 #5）
     cur.execute(
-        "SELECT r.project_id_norm AS key, r.project_name AS name, "
+        "SELECT " + PROJECT_BASE_SQL + " AS key, r.project_name AS name, "
         "COALESCE(SUM(r.actuals_total_h),0) AS h, COUNT(*) AS rows "
         "FROM timesheet_record r WHERE r.resource_id_norm = :rid "
         "AND r.project_id_norm IS NOT NULL AND r.report_month BETWEEN :m_start AND :m_end "
-        + EXCLUSION_SQL + " GROUP BY r.project_id_norm ORDER BY h DESC",
+        + EXCLUSION_SQL + " GROUP BY " + PROJECT_BASE_SQL + " ORDER BY h DESC",
         params,
     )
     by_project = [dict(x) for x in cur.fetchall()]
@@ -225,10 +256,11 @@ def search(conn, f: QueryFilter) -> dict:
     # 项目维度分布（供结果概览）
     cur = conn.cursor()
     cur.execute(
-        "SELECT r.project_id_norm AS key, r.project_name AS name, "
+        "SELECT " + PROJECT_BASE_SQL + " AS key, r.project_name AS name, "
         "COALESCE(SUM(r.actuals_total_h),0) AS h, COUNT(*) AS rows "
         "FROM timesheet_record r WHERE 1=1 " + EXCLUSION_SQL + where
-        + " AND r.project_id_norm IS NOT NULL GROUP BY r.project_id_norm ORDER BY h DESC LIMIT 50",
+        + " AND r.project_id_norm IS NOT NULL GROUP BY " + PROJECT_BASE_SQL
+        + " ORDER BY h DESC LIMIT 50",
         params,
     )
     by_project = [dict(x) for x in cur.fetchall()]
@@ -241,7 +273,7 @@ def search(conn, f: QueryFilter) -> dict:
 # ---------------------------------------------------------------------------
 _DIM_SQL = {
     "person": "r.resource_id_norm",
-    "project": "r.project_id_norm",
+    "project": PROJECT_BASE_SQL,
     "org": "r.organization",
     "cost_center": "r.cost_center",
 }
@@ -285,16 +317,36 @@ def month_bounds(conn) -> tuple[Optional[str], Optional[str]]:
 
 
 def project_name_for(conn, project_id: str) -> Optional[str]:
-    """取项目规范名（出现频次最高的 project_name）。"""
+    """取项目规范名（出现频次最高的 project_name）。按父项目号匹配整棵子树（§5.2 #8）。"""
     cur = conn.cursor()
     cur.execute(
-        "SELECT project_name, COUNT(*) AS c FROM timesheet_record "
-        "WHERE project_id_norm = ? AND project_name IS NOT NULL AND project_name <> '' "
-        "GROUP BY project_name ORDER BY c DESC LIMIT 1",
+        "SELECT r.project_name, COUNT(*) AS c FROM timesheet_record r "
+        "WHERE " + PROJECT_BASE_SQL + " = ? AND r.project_name IS NOT NULL AND r.project_name <> '' "
+        "GROUP BY r.project_name ORDER BY c DESC LIMIT 1",
         (project_id,),
     )
     r = cur.fetchone()
     return r["project_name"] if r else None
+
+
+def project_children(conn, base: str, start: str, end: str) -> list[dict]:
+    """父项目号 base 名下各子项目号明细（按**原始** project_id_norm 分组）。
+
+    用于「按项目」表父号行下钻（US-R2-04 / AC-02-4）。
+    交叉核对：Σ project_children(base) == aggregate_project(base).total（AC-02-3）。
+    """
+    params = {"pid": base, "m_start": start, "m_end": end}
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT r.project_id_norm AS key, MAX(r.project_name) AS name, "
+        "COALESCE(SUM(r.actuals_total_h),0) AS h, COUNT(*) AS rows "
+        "FROM timesheet_record r WHERE 1=1 " + EXCLUSION_SQL
+        + " AND " + PROJECT_BASE_SQL + " = :pid AND r.project_id_norm IS NOT NULL "
+        "AND r.report_month BETWEEN :m_start AND :m_end "
+        "GROUP BY r.project_id_norm ORDER BY h DESC",
+        params,
+    )
+    return [dict(x) for x in cur.fetchall()]
 
 
 def fill_month_gaps(by_month: list[dict], start: str, end: str) -> list[dict]:
@@ -310,16 +362,24 @@ def fill_month_gaps(by_month: list[dict], start: str, end: str) -> list[dict]:
 
 
 def list_projects(conn, limit: int = 5000) -> list[dict]:
-    """项目清单（实时聚合，不建主数据表）。"""
+    """项目清单（实时聚合，不建主数据表）。
+
+    项目号按**父号**归并（PROJECT_BASE_SQL）——SELECT / GROUP BY 必须同口径，
+    否则 SQLite 会为该组返回任意子号作为 pid（实测：仅改 GROUP BY 会有 203 个
+    pid 仍为子号）。返回每项附 suspicious 标记（日期型脏数据，仅标记不删改）。
+    """
     cur = conn.cursor()
     cur.execute(
-        "SELECT project_id_norm AS pid, project_id_raw AS raw, "
-        "MAX(project_name) AS name FROM timesheet_record "
-        "WHERE project_id_norm IS NOT NULL GROUP BY project_id_norm "
+        "SELECT " + PROJECT_BASE_SQL + " AS pid, r.project_id_raw AS raw, "
+        "MAX(r.project_name) AS name FROM timesheet_record r "
+        "WHERE r.project_id_norm IS NOT NULL GROUP BY " + PROJECT_BASE_SQL + " "
         "ORDER BY pid LIMIT ?",
         (limit,),
     )
-    return [dict(x) for x in cur.fetchall()]
+    rows = [dict(x) for x in cur.fetchall()]
+    for r in rows:
+        r["suspicious"] = _is_suspicious_project(r.get("pid"))
+    return rows
 
 
 def list_organizations(conn, limit: int = 5000) -> list[str]:

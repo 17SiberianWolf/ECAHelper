@@ -181,3 +181,18 @@ svg { display: block; }
 
 a.link { color: var(--brand); text-decoration: none; }
 a.link:hover { text-decoration: underline; }
+
+/* ---------- 项目号下钻（父号可展开 → 子项目号明细）第三方迭代 T06 ---------- */
+.proj-toggle { cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 6px; }
+.proj-toggle .arrow { display: inline-block; transition: transform .15s; color: var(--muted); font-size: 11px; }
+.proj-toggle.open .arrow { transform: rotate(90deg); }
+tr.child-row > td.child-cell { padding: 0 0 0 26px; background: #fafbfc; }
+table.child-table { margin: 4px 0 6px; }
+table.child-table th, table.child-table td { font-size: 12px; padding: 5px 10px; }
+table.child-table th { background: #f2f4f7; }
+
+/* ---------- WBS 下钻可折叠区块 ---------- */
+details.fold { margin-top: 10px; border: 1px dashed var(--line); border-radius: 6px; padding: 6px 12px; }
+details.fold > summary { cursor: pointer; user-select: none; color: var(--ink); font-weight: 600; font-size: 13px; }
+details.fold[open] > summary { margin-bottom: 4px; }
+details.fold code { background: var(--chip); padding: 0 4px; border-radius: 3px; }

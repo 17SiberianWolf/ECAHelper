@@ -21,12 +21,18 @@
       <input type="hidden" id="pEnd" value="{{ month_hi or '' }}">
       <input type="hidden" id="pHi" value="{{ month_hi or '' }}">
     </div>
-    <div class="field">
-      <label>WBS 下钻前缀</label>
-      <input type="text" id="wbsPrefix" placeholder="留空=第一级">
-    </div>
   </div>
-  <p class="hint">ⓘ 支持输入关键字过滤共 <span id="projectCount">…</span> 个项目号（内存包含匹配、实时高亮）；允许输入列表外的值。</p>
+  <details class="fold" id="wbsFold">
+    <summary>⟐ WBS 下钻（可折叠区块，功能保留）</summary>
+    <div class="row" style="margin-top:8px">
+      <div class="field">
+        <label>WBS 下钻前缀</label>
+        <input type="text" id="wbsPrefix" placeholder="留空=第一级">
+      </div>
+    </div>
+    <p class="hint">ⓘ 留空显示第一级；输入前缀（如 <code>2</code>）按该前缀下钻其子树。结果见「三层结果」中的 <b>WBS 下一级下钻</b> 区块。</p>
+  </details>
+  <p class="hint">ⓘ 支持输入关键字过滤共 <span id="projectCount">…</span> 个项目号（内存包含匹配、实时高亮）；允许输入列表外的值。点击「按项目」表里的父项目号可展开其名下子项目号明细。</p>
   <div class="quick">
     <button data-q="thisyear">今年</button>
     <button data-q="lastyear">去年</button>

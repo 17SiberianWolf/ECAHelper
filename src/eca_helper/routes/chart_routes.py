@@ -12,7 +12,7 @@ from flask import Blueprint, jsonify, request
 
 from eca_helper.db import ensure_db, get_connection
 from eca_helper.queries import aggregate
-from eca_helper.queries.aggregate import EXCLUSION_SQL, QueryFilter, _base_where
+from eca_helper.queries.aggregate import EXCLUSION_SQL, PROJECT_BASE_SQL, QueryFilter, _base_where
 
 bp = Blueprint("chart_routes", __name__)
 
@@ -109,11 +109,11 @@ def api_chart_matrix():
             qm_r = ",".join("?" for _ in rids)
             cur = conn.cursor()
             cur.execute(
-                "SELECT r.project_id_norm AS pid, r.resource_id_norm AS rid, "
+                "SELECT " + PROJECT_BASE_SQL + " AS pid, r.resource_id_norm AS rid, "
                 "COALESCE(SUM(r.actuals_total_h),0) AS h FROM timesheet_record r "
                 "WHERE r.report_month BETWEEN ? AND ? " + EXCLUSION_SQL
-                + f" AND r.project_id_norm IN ({qm_p}) AND r.resource_id_norm IN ({qm_r}) "
-                "GROUP BY r.project_id_norm, r.resource_id_norm",
+                + " AND " + PROJECT_BASE_SQL + f" IN ({qm_p}) AND r.resource_id_norm IN ({qm_r}) "
+                "GROUP BY " + PROJECT_BASE_SQL + ", r.resource_id_norm",
                 [start, end] + pids + rids,
             )
             for row in cur.fetchall():
