@@ -137,8 +137,11 @@ def export_to_file(conn, f: QueryFilter, fmt: str = "xlsx", lang: str = "both",
     path = EXPORT_DIR / fname
 
     if fmt == "csv":
+        # csv.writer 默认行尾为 "\r\n"；若用 write_text（newline 默认转换）
+        # 会在 Windows 上二次转换成 "\r\r\n"，导致 Excel 打开后数据行之间夹空行。
+        # 故直接写字节，绕过换行转换，保留 csv.writer 原始的 "\r\n"。
         content = build_csv(rows, lang)
-        path.write_text(content, encoding="utf-8-sig")
+        path.write_bytes(content.encode("utf-8-sig"))
     else:
         wb = build_workbook(rows, lang)
         wb.save(str(path))
