@@ -48,10 +48,20 @@
 
     var cards = [];
     cards.push(card("总工时 (h)", fmtH(t.total_h)));
-    cards.push(card("明细行数", t.rows || 0));
-    cards.push(card("人员数", t.persons || 0));       // t.persons = distinct resource_id_norm（真实口径）
-    if (result.by_project) {
-      cards.push(card("项目数", result.by_project.length)); // 项目维度以 by_project 长度为据
+    if (opts.cardMode === "employee") {
+      // 员工页顶部卡片对齐 PRD §4.2：总工时 / 项目工时 / 非项目工时 / 覆盖月份。
+      // 单查一人时「人员数=1」无意义噪声，故不放人员数/项目数/明细行数卡。
+      var projH = 0, nonH = 0;
+      (result.by_project || []).forEach(function (p) { projH += (p.h || 0); });
+      (result.non_project || []).forEach(function (p) { nonH += (p.h || 0); });
+      cards.push(card("项目工时 (h)", fmtH(projH)));
+      cards.push(card("非项目工时 (h)", fmtH(nonH)));
+    } else {
+      cards.push(card("明细行数", t.rows || 0));
+      cards.push(card("人员数", t.persons || 0));       // t.persons = distinct resource_id_norm（真实口径）
+      if (result.by_project) {
+        cards.push(card("项目数", result.by_project.length)); // 项目维度以 by_project 长度为据
+      }
     }
     cards.push(card("覆盖月份", t.months || 0));
     html += '<div class="cards">' + cards.join("") + "</div>";
@@ -388,7 +398,7 @@
       api("/api/query/employee", "POST", { resource_id: rid, q: q, start: start, end: end })
         .then(function (r) {
           setMsg(el("eMsg"), "", null);
-          renderThreeLayer(el("result"), r, {});
+          renderThreeLayer(el("result"), r, { cardMode: "employee" });
           renderCharts("employee", { start: start, end: end, resource_id: r.resource_id });
         })
         .catch(function (e) { setMsg(el("eMsg"), e.message, "error"); });
