@@ -3,12 +3,14 @@
 0 工时 36；资源号 270；有别名变体 192。
 """
 import json
-import os
 import sys
+from pathlib import Path
 
-ROOT = r"C:/Users/Administrator/Desktop/ECAHelper"
-sys.path.insert(0, ROOT)
-import eca_helper  # noqa: F401
+ROOT = Path(__file__).resolve().parents[1]  # tools/ 的上一级 = 项目根
+SRC = ROOT / "src"
+sys.path.insert(0, str(SRC))  # 让 `import config` / `from eca_helper...` 生效
+
+import eca_helper  # noqa: F401  (注入 src/ 到 sys.path)
 from eca_helper.db import ensure_db, get_connection, reset_db
 from eca_helper.parsers import importer
 from eca_helper.queries import aggregate

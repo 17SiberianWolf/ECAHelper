@@ -1,6 +1,14 @@
-import os, glob, io, re, collections
+import collections
+import glob
+import io
+import os
+import re
+from pathlib import Path
+
 from openpyxl import load_workbook
-SRC = r"C:\Users\Administrator\Desktop\ECAHelper\OriginSource"
+
+ROOT = Path(__file__).resolve().parents[1]  # tools/ 的上一级 = 项目根
+SRC = ROOT / "OriginSource"
 out = io.StringIO()
 def w(*a): print(*a, file=out)
 def norm(s):
@@ -63,6 +71,6 @@ for base,n,cnt,key in dupdetail[:8]:
     w(f"{base}: {n} 组重复, 最大重复 {cnt} 次")
     w(f"    key={key[:9]}")
 wb=None
-with open(r"C:\Users\Administrator\Desktop\ECAHelper\tools\_deep2_report.txt","w",encoding="utf-8") as fh:
+with open(ROOT / "tools" / "_deep2_report.txt", "w", encoding="utf-8") as fh:
     fh.write(out.getvalue())
 print("ok")

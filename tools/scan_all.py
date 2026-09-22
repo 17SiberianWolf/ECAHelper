@@ -1,7 +1,15 @@
-import os, glob, io, re, datetime, collections
+import collections
+import datetime
+import glob
+import io
+import os
+import re
+from pathlib import Path
+
 from openpyxl import load_workbook
 
-SRC = r"C:\Users\Administrator\Desktop\ECAHelper\OriginSource"
+ROOT = Path(__file__).resolve().parents[1]  # tools/ 的上一级 = 项目根
+SRC = ROOT / "OriginSource"
 out = io.StringIO()
 def w(*a): print(*a, file=out)
 
@@ -72,6 +80,6 @@ w("\n\n=== ORGANIZATION values ===")
 for o, c in org_counter.most_common():
     w(f"  '{o}': {c}")
 
-with open(r"C:\Users\Administrator\Desktop\ECAHelper\tools\_scan_report.txt", "w", encoding="utf-8") as fh:
+with open(ROOT / "tools" / "_scan_report.txt", "w", encoding="utf-8") as fh:
     fh.write(out.getvalue())
 print("ok")

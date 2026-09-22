@@ -1,7 +1,13 @@
-import os, glob, io, json
+import glob
+import io
+import json
+import os
+from pathlib import Path
+
 from openpyxl import load_workbook
 
-SRC = r"C:\Users\Administrator\Desktop\ECAHelper\OriginSource"
+ROOT = Path(__file__).resolve().parents[1]  # tools/ 的上一级 = 项目根
+SRC = ROOT / "OriginSource"
 out = io.StringIO()
 def w(*a): print(*a, file=out)
 
@@ -33,6 +39,6 @@ def dump(f, nrows=12):
 for f in [files[3], files[7], files[11], files[34]]:
     dump(f)
 
-with open(r"C:\Users\Administrator\Desktop\ECAHelper\tools\_sheet_report.txt", "w", encoding="utf-8") as fh:
+with open(ROOT / "tools" / "_sheet_report.txt", "w", encoding="utf-8") as fh:
     fh.write(out.getvalue())
 print("ok")

@@ -1,15 +1,18 @@
 """临时冒烟测试：对 3 个样本文件跑通核心导入管线（不污染最终库）。"""
 import os
 import sys
+from pathlib import Path
 
-ROOT = r"C:/Users/Administrator/Desktop/ECAHelper"
-sys.path.insert(0, ROOT)
-import eca_helper  # noqa: F401  (注入 ROOT 到 sys.path)
-from eca_helper.db import ensure_db, get_connection
-from eca_helper.parsers import importer
-from config import ORIGIN_DIR
+ROOT = Path(__file__).resolve().parents[1]  # tools/ 的上一级 = 项目根
+SRC = ROOT / "src"
+sys.path.insert(0, str(SRC))  # 让 `import config` / `from eca_helper...` 生效
 
-TMP_DB = os.path.join(ROOT, "tools", "_smoke3.db")
+import eca_helper  # noqa: E402  (注入 src/ 到 sys.path)
+from eca_helper.db import ensure_db, get_connection  # noqa: E402
+from eca_helper.parsers import importer  # noqa: E402
+from config import ORIGIN_DIR  # noqa: E402
+
+TMP_DB = str(ROOT / "tools" / "_smoke3.db")
 if os.path.exists(TMP_DB):
     os.remove(TMP_DB)
 

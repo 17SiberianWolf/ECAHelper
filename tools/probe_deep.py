@@ -1,7 +1,14 @@
-import os, glob, io, re, collections
+import collections
+import glob
+import io
+import os
+import re
+from pathlib import Path
+
 from openpyxl import load_workbook
 
-SRC = r"C:\Users\Administrator\Desktop\ECAHelper\OriginSource"
+ROOT = Path(__file__).resolve().parents[1]  # tools/ 的上一级 = 项目根
+SRC = ROOT / "OriginSource"
 out = io.StringIO()
 def w(*a): print(*a, file=out)
 def norm(s):
@@ -97,6 +104,6 @@ w("v2(新) 样例:", sorted(era_name_sample["v2"])[:12])
 w("v1 人数:", len(era_name_sample["v1"]), " v2 人数:", len(era_name_sample["v2"]))
 w("两版共有姓名:", len(era_name_sample["v1"] & era_name_sample["v2"]))
 
-with open(r"C:\Users\Administrator\Desktop\ECAHelper\tools\_deep_report.txt","w",encoding="utf-8") as fh:
+with open(ROOT / "tools" / "_deep_report.txt", "w", encoding="utf-8") as fh:
     fh.write(out.getvalue())
 print("ok")

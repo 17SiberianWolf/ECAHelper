@@ -3,9 +3,11 @@
 """
 import json
 import sys
+from pathlib import Path
 
-ROOT = r"C:/Users/Administrator/Desktop/ECAHelper"
-sys.path.insert(0, ROOT)
+ROOT = Path(__file__).resolve().parents[1]  # tools/ 的上一级 = 项目根
+SRC = ROOT / "src"
+sys.path.insert(0, str(SRC))  # 让 `import config` / `import app` 生效
 
 import app as ecapp  # noqa: E402
 from eca_helper.db import get_connection  # noqa: E402
