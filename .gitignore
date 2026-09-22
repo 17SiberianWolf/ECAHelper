@@ -32,3 +32,8 @@ _st.txt
 _dbg*
 _junk*
 _finalize*
+_tmp*
+# 子代理 / 工具遗留的临时排查产物（下划线开头的文本与目录，
+# 如 _diag_docs.txt / _restore_docs.txt / _tmp_numstat.txt / _qa_out\）
+_*.txt
+_*/
