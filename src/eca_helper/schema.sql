@@ -94,3 +94,33 @@ CREATE TABLE IF NOT EXISTS saved_view (
   params      TEXT NOT NULL,   -- JSON
   created_at  TEXT
 );
+
+-- ---------------------------------------------------------------------------
+-- 第二轮新增：本机审计日志（独立新表，不动上述现有 6 张表）
+--   ts         本地时间 'YYYY-MM-DD HH:MM:SS'
+--   level      INFO | WARNING | ERROR
+--   category   query | import | export | quality | system
+--   action     端点名/操作名，如 'query.project'
+--   target     对象：项目号 / 文件名 / 人员ID …（可空）
+--   result     ok | fail
+--   detail     异常堆栈（截断 ≤4000）/ 附加 JSON
+-- 隐私红线（AC-07-5）：仅落本机 SQLite，无任何远程上报。
+-- CREATE TABLE IF NOT EXISTS 保证幂等；ensure_db() 每次启动 executescript 即自动补建。
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS audit_log (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts           TEXT NOT NULL,                 -- 本地时间 'YYYY-MM-DD HH:MM:SS'
+  level        TEXT NOT NULL DEFAULT 'INFO',  -- INFO | WARNING | ERROR
+  category     TEXT NOT NULL,                 -- query | import | export | quality | system
+  action       TEXT NOT NULL,                 -- 端点名/操作名，如 'query.project'
+  target       TEXT,                          -- 对象：项目号 / 文件名 / 人员ID …（可空）
+  result       TEXT NOT NULL DEFAULT 'ok',    -- ok | fail
+  status_code  INTEGER,                       -- HTTP 状态码
+  duration_ms  INTEGER,                       -- 处理耗时
+  request_id   TEXT,                          -- 贯穿一次请求（与文件日志一致）
+  message      TEXT,                          -- 简述 / 错误信息（截断 ≤500）
+  detail       TEXT                           -- 异常堆栈（截断 ≤4000）
+);
+CREATE INDEX IF NOT EXISTS idx_audit_ts  ON audit_log(ts);
+CREATE INDEX IF NOT EXISTS idx_audit_cat ON audit_log(category);
+CREATE INDEX IF NOT EXISTS idx_audit_lvl ON audit_log(level);

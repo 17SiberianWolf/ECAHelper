@@ -4,6 +4,8 @@
     - 构建 Flask app（模板/静态目录由 config 的三态路径解析定位）；
     - 注册全部蓝图（导入/项目/员工/检索/质量/导出/图表）；
     - 启动期 ensure_db() 建库；
+    - 日志与审计子系统（第二轮 T07）：create_app() 内先 setup_logging()，
+      注册蓝图后 register_hooks(app)（每请求至多 1 条审计，仅落本机）；
     - 数据自举（T03，决策 5）：以完成标记 ``data/.auto_import.done`` 为门槛，
       标记缺失时**同步（阻塞）导入** OriginSource（skip 幂等，可自愈补齐半途
       失败的部分库），全部成功才写标记；失败仅记日志、不阻断服务；
@@ -18,6 +20,7 @@
 
 from __future__ import annotations
 
+import logging
 import socket
 import sys
 import threading
@@ -35,12 +38,14 @@ import config
 from flask import Flask
 
 from eca_helper.db import ensure_db
+from eca_helper.logging_setup import register_hooks, setup_logging
 from eca_helper.parsers import importer
 from eca_helper.routes import (
     chart_routes,
     employee_routes,
     export_routes,
     import_routes,
+    log_routes,
     project_routes,
     quality_routes,
     search_routes,
@@ -54,6 +59,7 @@ _BLUEPRINTS = (
     quality_routes.bp,
     export_routes.bp,
     chart_routes.bp,
+    log_routes.bp,
 )
 
 # 自动导入“完成标记”：位于可写数据目录内（data/.auto_import.done）。
@@ -63,6 +69,8 @@ _AUTO_IMPORT_MARKER = config.DATA_DIR / ".auto_import.done"
 
 
 def create_app() -> Flask:
+    # 日志先于一切初始化（第二轮 T07）：文件 + 控制台双通道，随后才注册蓝图与挂钩。
+    setup_logging()
     app = Flask(
         __name__,
         template_folder=str(config.TEMPLATE_DIR),
@@ -71,6 +79,8 @@ def create_app() -> Flask:
     app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
     for bp in _BLUEPRINTS:
         app.register_blueprint(bp)
+    # 请求挂钩（审计至多每请求 1 条）必须在蓝图注册之后挂载。
+    register_hooks(app)
     return app
 
 
@@ -153,8 +163,16 @@ def _bootstrap(log) -> None:
 
 
 def main() -> None:
+    # 启动日志同时输出到 stdout（start.bat 依赖重定向生成 startup.log）与文件日志。
+    setup_logging()
+    sys_logger = logging.getLogger("eca.system")
+
     def log(msg: str) -> None:
         print(msg, flush=True)
+        try:
+            sys_logger.info(msg)
+        except Exception:  # noqa: BLE001 - 日志失败不得影响启动
+            pass
 
     log("=" * 64)
     log(f"[ECAHelper] 数据目录 : {config.APP_DIR}")

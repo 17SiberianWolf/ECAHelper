@@ -115,6 +115,16 @@ SCHEMA_PATH = (
 APP_PORT = 5000
 
 # ---------------------------------------------------------------------------
+# 日志配置（第二轮 T07：文件日志 + 控制台双通道）
+# ---------------------------------------------------------------------------
+# 日志文件目录（可写数据根下 data/logs）。随三态路径自动迁移。
+LOG_DIR = DATA_DIR / "logs"
+# 日志保留天数（按天滚动的轮转文件个数 + 启动兜底清理阈值）
+LOG_RETENTION_DAYS = 30
+# 日志级别：默认 INFO，可用环境变量 ECA_LOG_LEVEL 覆盖（DEBUG/INFO/WARNING/ERROR）
+LOG_LEVEL = os.environ.get("ECA_LOG_LEVEL", "INFO").upper()
+
+# ---------------------------------------------------------------------------
 # 归一化规则常量
 # ---------------------------------------------------------------------------
 # 空 Resource ID 桶（决策 Q1：原样落库，归入「未标识人员」）
@@ -207,6 +217,7 @@ def bilingual_header(field: str, lang: str = "both") -> str:
 
 
 def ensure_dirs() -> None:
-    """确保运行时目录存在（数据库目录 + 导出目录）。"""
+    """确保运行时目录存在（数据库目录 + 导出目录 + 日志目录）。"""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
