@@ -112,7 +112,21 @@ def import_files(paths, mode: str = "skip", db_path=None) -> ImportReport:
     conn = get_connection(db_path)
     try:
         for path in files:
-            import_one_file(conn, Path(path), mode, report)
+            # 逐文件兜底（健壮性修复）：任何单文件异常都不得中断整批导入，
+            # 记录失败后继续处理其余文件。
+            try:
+                import_one_file(conn, Path(path), mode, report)
+            except Exception as exc:  # noqa: BLE001 - 单文件失败记录后继续
+                name = Path(path).name
+                report.files_failed += 1
+                report.failed_files.append((name, f"未捕获异常: {exc!r}"))
+                report.per_file.append(
+                    {"file": name, "status": "failed", "reason": "unhandled"}
+                )
+                try:
+                    conn.rollback()
+                except Exception:  # noqa: BLE001 - 回滚失败不影响继续处理
+                    pass
     finally:
         conn.close()
     return report
@@ -186,27 +200,42 @@ def import_one_file(conn, path: Path, mode: str, report: ImportReport) -> None:
     zero_count = sum(1 for r in rows if r["actuals_total_h"] == 0.0)
     empty_rid = sum(1 for r in rows if r["resource_id_norm"] == UNKNOWN_RESOURCE)
 
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO import_batch (id, source_file, parsed_month, imported_at, "
-        "row_count, anomaly_count, duplicate_count, status) "
-        "VALUES (?,?,?,?,?,?,?, 'done')",
-        (
-            batch_id,
-            name,
-            month,
-            datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            len(rows),
-            anomaly_count,
-            dup_count,
-        ),
-    )
-    _insert_records(cur, rows, batch_id, name, loc["sheet"])
-    conn.commit()
+    # ---- 落库段（健壮性修复）：整段 try/except 包裹 ----
+    # 一旦 INSERT import_batch / _insert_records / commit / person 维护任一失败，
+    # 回滚本次写入并把该文件记入 failed_files，然后 return（不 raise），
+    # 由 import_files 循环继续处理其余文件，避免“部分库”中断整批导入。
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO import_batch (id, source_file, parsed_month, imported_at, "
+            "row_count, anomaly_count, duplicate_count, status) "
+            "VALUES (?,?,?,?,?,?,?, 'done')",
+            (
+                batch_id,
+                name,
+                month,
+                datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                len(rows),
+                anomaly_count,
+                dup_count,
+            ),
+        )
+        _insert_records(cur, rows, batch_id, name, loc["sheet"])
+        conn.commit()
 
-    # 维护 person 表（新增/补别名/重算 canonical）
-    person_service.ensure_persons_for_batch(conn, rows, batch_id)
+        # 维护 person 表（新增/补别名/重算 canonical）
+        person_service.ensure_persons_for_batch(conn, rows, batch_id)
+    except Exception as exc:  # noqa: BLE001 - 落库失败不得中断整批
+        try:
+            conn.rollback()
+        except Exception:  # noqa: BLE001 - 回滚失败不影响继续处理
+            pass
+        report.files_failed += 1
+        report.failed_files.append((name, f"落库失败: {exc!r}"))
+        report.per_file.append({"file": name, "status": "failed", "reason": "db_write"})
+        return
 
+    # ---- 成功路径：统计与 per_file 记录（行为保持不变）----
     report.files_imported += 1
     report.new_rows += len(rows)
     report.duplicate_rows += dup_count

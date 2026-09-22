@@ -14,6 +14,9 @@ data/*.db
 data/exports/*
 !data/exports/.gitkeep
 
+# 自动导入完成标记（运行时生成的自举门槛）
+data/.auto_import.done
+
 # 原始输入工时表（含员工隐私，体积大，不入库）
 OriginSource/
 

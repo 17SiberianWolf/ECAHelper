@@ -4,8 +4,9 @@
     - 构建 Flask app（模板/静态目录由 config 的三态路径解析定位）；
     - 注册全部蓝图（导入/项目/员工/检索/质量/导出/图表）；
     - 启动期 ensure_db() 建库；
-    - 空库自举：DB 为空且存在 OriginSource 时**同步（阻塞）导入**（T03，
-      决策 5：保证首次数据完整可见），失败仅记日志、不阻断服务；
+    - 数据自举（T03，决策 5）：以完成标记 ``data/.auto_import.done`` 为门槛，
+      标记缺失时**同步（阻塞）导入** OriginSource（skip 幂等，可自愈补齐半途
+      失败的部分库），全部成功才写标记；失败仅记日志、不阻断服务；
     - 使用 Waitress 常驻（纯 Python，无 C 依赖）；
     - 端口固定 APP_PORT（被占用自动 +1），并自动打开浏览器。
 
@@ -33,7 +34,7 @@ import eca_helper  # noqa: F401  确保 src/ 注入 sys.path
 import config
 from flask import Flask
 
-from eca_helper.db import ensure_db, is_empty
+from eca_helper.db import ensure_db
 from eca_helper.parsers import importer
 from eca_helper.routes import (
     chart_routes,
@@ -54,6 +55,11 @@ _BLUEPRINTS = (
     export_routes.bp,
     chart_routes.bp,
 )
+
+# 自动导入“完成标记”：位于可写数据目录内（data/.auto_import.done）。
+# 以标记是否存在作为自举门槛（取代旧的 is_empty 判定），使“半途失败的
+# 部分库”在下次启动时能够自愈补齐（见 _bootstrap 说明）。
+_AUTO_IMPORT_MARKER = config.DATA_DIR / ".auto_import.done"
 
 
 def create_app() -> Flask:
@@ -81,23 +87,50 @@ def _find_free_port(preferred: int) -> int:
             s.close()
 
 
-def _bootstrap_if_empty(log) -> None:
-    """首次启动自举：库为空且存在 OriginSource 时同步（阻塞）导入。
+def _write_auto_import_marker(log) -> None:
+    """写入自动导入完成标记（失败仅记日志，绝不影响服务启动）。"""
+    try:
+        _AUTO_IMPORT_MARKER.parent.mkdir(parents=True, exist_ok=True)
+        _AUTO_IMPORT_MARKER.write_text("done\n", encoding="utf-8")
+        log(f"[ECAHelper] 已写入初始化完成标记：{_AUTO_IMPORT_MARKER}")
+    except OSError as exc:  # noqa: BLE001 - 标记写入失败不影响服务
+        log(f"[ECAHelper] 写入完成标记失败（不影响服务启动）：{exc!r}")
 
-    顺序（决策 5）：ensure_dirs() -> ensure_db() -> is_empty() ->
-    import_directory(ORIGIN_DIR, mode="skip")。全程 try/except 包裹，
-    任何失败只写日志、绝不阻断服务启动。
+
+def _bootstrap(log) -> None:
+    """启动自举：以「完成标记」为门槛同步（阻塞）导入，失败/半途中断可自愈。
+
+    设计（健壮性修复）：
+        - 门槛由旧的 ``is_empty()``（行数==0）改为完成标记
+          ``config.DATA_DIR/.auto_import.done``。旧的 is_empty 判定会把
+          “半途失败的部分库”误判为非空，导致此后每次启动都跳过导入、永久
+          停留于不完整数据；
+        - **标记不存在** -> 执行 ``import_directory(ORIGIN_DIR, mode="skip")``
+          （skip 模式幂等：已导入文件自动跳过，从而把“部分库”缺失的文件补齐）；
+          返回后**仅当 report.files_failed == 0 且无失败文件**时才写入标记；
+        - **标记存在** -> 直接跳过（保持“不重复导入、不自动抓取新月份”语义）；
+        - **ORIGIN_DIR 不存在** -> 打印“未找到源数据目录，跳过自动导入”并写入
+          标记。取舍：写入标记可避免每次启动都空扫目录；代价是日后若再补入
+          OriginSource，将不会自动导入（需手动导入，或先删除该标记）；此取舍
+          是为“迁移到新 PC 首跑不卡顿”而有意为之；
+        - 全程**同步**执行 + 整体 try/except，任何失败只记日志、绝不阻断服务。
+
+    顺序（决策 5）：先于浏览器计时器与 waitress.serve。
     """
     try:
         config.ensure_dirs()
-        db_path = ensure_db()
-        if not is_empty(db_path):
-            log("[ECAHelper] 数据库已有数据，跳过自动导入。")
+        ensure_db()
+
+        if _AUTO_IMPORT_MARKER.exists():
+            log("[ECAHelper] 已完成初始化（.auto_import.done），跳过自动导入。")
             return
+
         origin = config.ORIGIN_DIR
         if not origin.exists():
             log(f"[ECAHelper] 未找到源数据目录 {origin}，跳过自动导入。")
+            _write_auto_import_marker(log)
             return
+
         log(f"[ECAHelper] 首次运行：正在从 {origin} 自动导入数据，请稍候……")
         report = importer.import_directory(str(origin), mode="skip")
         d = report.to_dict()
@@ -108,6 +141,13 @@ def _bootstrap_if_empty(log) -> None:
             f"新增明细 {d['new_rows']} 行（重复 {d['duplicate_rows']}，"
             f"异常 {d['anomaly_rows']}，0 工时 {d['zero_rows']}）。"
         )
+        if d["files_failed"] == 0 and not d["failed_files"]:
+            _write_auto_import_marker(log)
+        else:
+            log(
+                f"[ECAHelper] 存在 {d['files_failed']} 个失败文件，本次不写入完成标记；"
+                "下次启动将自动重试补齐。"
+            )
     except Exception as exc:  # noqa: BLE001 - 自举失败不得阻断服务
         log(f"[ECAHelper] 自动导入失败（不影响服务启动）：{exc!r}")
 
@@ -120,8 +160,9 @@ def main() -> None:
     log(f"[ECAHelper] 数据目录 : {config.APP_DIR}")
     log(f"[ECAHelper] 数据库   : {config.DB_PATH}")
 
-    # 空库自举：同步执行，先于浏览器计时器与 waitress.serve（决策 5）
-    _bootstrap_if_empty(log)
+    # 数据自举（完成标记门槛，标记缺失即幂等补齐）：同步执行，
+    # 先于浏览器计时器与 waitress.serve（决策 5）。
+    _bootstrap(log)
 
     app = create_app()
     port = _find_free_port(config.APP_PORT)
