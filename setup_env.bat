@@ -1,17 +1,47 @@
 @echo off
-REM ECAHelper ç¯å¢ƒå‡†å¤‡ï¼šåœ¨ managed venv ä¸­å®‰è£…ä¾èµ–ï¼ˆä¸æ±¡æŸ“å…¨å±€è¿è¡Œæ—¶ï¼‰
-set PYTHON=C:\Users\Administrator\.workbuddy\binaries\python\versions\3.13.12\python.exe
-set VENV=C:\Users\Administrator\.workbuddy\binaries\python\envs\default
-set ROOT=%~dp0
+REM ==========================================================================
+REM  ECAHelper »·¾³×¼±¸£º½ö´´½¨ÏîÄ¿ÄÚ .venv ²¢°²×°ÒÀÀµ£¨²»Æô¶¯·şÎñ£©
+REM  Ïà¶ÔÂ·¾¶½âÎö Python£¬ÕûÄ¿Â¼¿É°áÇ¨¡£
+REM ==========================================================================
+setlocal enableextensions
+cd /d "%~dp0"
 
-if not exist "%VENV%\Scripts\python.exe" (
-    echo [setup] åˆ›å»º venv: %VENV%
-    "%PYTHON%" -m venv "%VENV%"
+set "PY="
+set "PYARGS="
+
+if not defined PY for /f "delims=" %%I in ('where py 2^>nul') do (
+    if not defined PY (
+        set "PY=%%I" & set "PYARGS=-3"
+    )
+)
+if not defined PY for /f "delims=" %%I in ('where python 2^>nul') do (
+    if not defined PY (
+        set "PY=%%I"
+    )
 )
 
-echo [setup] å®‰è£…ä¾èµ– (flask / waitress / openpyxl)...
-"%VENV%\Scripts\python.exe" -m pip install -U pip
-"%VENV%\Scripts\python.exe" -m pip install -r "%ROOT%requirements.txt"
+if not defined PY (
+    echo [setup] Î´¼ì²âµ½ Python 3.10+£¬ÇëÇ°Íù https://www.python.org/downloads/ °²×°¡£
+    pause
+    exit /b 1
+)
 
-echo [setup] å®Œæˆã€‚å¯è¿è¡Œ start.bat å¯åŠ¨ã€‚
+if not exist ".venv\Scripts\python.exe" (
+    echo [setup] ´´½¨ĞéÄâ»·¾³ .venv ...
+    "%PY%" %PYARGS% -m venv ".venv"
+    if errorlevel 1 (
+        echo [setup] ´´½¨ .venv Ê§°Ü¡£
+        pause
+        exit /b 1
+    )
+)
+
+echo [setup] Éı¼¶ pip ...
+".venv\Scripts\python.exe" -m pip install -U pip
+
+echo [setup] °²×°ÒÀÀµ (requirements.txt) ...
+".venv\Scripts\python.exe" -m pip install -r "requirements.txt"
+
+echo [setup] Íê³É¡£¿ÉÔËĞĞ start.bat Æô¶¯¡£
 pause
+endlocal

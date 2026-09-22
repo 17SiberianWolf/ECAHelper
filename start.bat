@@ -1,47 +1,57 @@
 @echo off
-REM ECAHelper ä¸€é”®å¯åŠ¨ï¼ˆå¥å£®ç‰ˆï¼‰
-REM - ä¼˜å…ˆæ‰˜ç®¡è¿è¡Œæ—¶ï¼ˆå·²å« flask 3.1.3 + openpyxl 3.1.5ï¼Œç¦»çº¿å¯è·‘ï¼‰ï¼›ç¼ºå¤±åˆ™å›žé€€ venv
-REM - æ‰€æœ‰è¾“å‡ºå†™å…¥ startup.logï¼›å¯åŠ¨å¼‚å¸¸æ—¶ pauseï¼Œé¿å…é»‘çª—ä¸€é—ªè€Œè¿‡æ— ç—•è¿¹
-set PYTHON=C:\Users\Administrator\.workbuddy\binaries\python\versions\3.13.12\python.exe
-set VENV=C:\Users\Administrator\.workbuddy\binaries\python\envs\default
-set ROOT=%~dp0
-cd /d "%ROOT%"
+REM ==========================================================================
+REM  ECAHelper Ò»¼üÆô¶¯£¨Ïà¶ÔÂ·¾¶½âÎö Python£¬ÕûÄ¿Â¼¿É°áÇ¨£©
+REM  ½âÎöË³Ðò£ºÏîÄ¿ÄÚ .venv  ->  ÏµÍ³ python  ->  py -3
+REM  Ã¿¸öºòÑ¡¶¼±ØÐëÍ¨¹ý `import flask, openpyxl` Ð£Ñé²Å»á±»²ÉÓÃ¡£
+REM  ËùÓÐÔËÐÐÊä³öÐ´Èë startup.log£»ÕÒ²»µ½¿ÉÓÃ»·¾³Ê±¸ø³öÃ÷È·ÖÐÎÄÌáÊ¾²¢ pause¡£
+REM ==========================================================================
+setlocal enableextensions
+cd /d "%~dp0"
 
-set STARTED=0
+set "PY="
+set "PYARGS="
 
-"%PYTHON%" -c "import flask, openpyxl" >nul 2>&1 && (
-    echo.
-    echo ============================================================
-    echo   ECAHelper æ­£åœ¨å¯åŠ¨â€¦â€¦
-    echo   è¿è¡Œæ—¥å¿— : startup.log
-    echo   æµè§ˆå™¨   : æ•°ç§’åŽè‡ªåŠ¨æ‰“å¼€ï¼ˆæˆ–æ‰‹åŠ¨è®¿é—®ä¸‹æ–¹åœ°å€ï¼‰
-    echo   è®¿é—®åœ°å€ : http://127.0.0.1:5000
-    echo   åœæ­¢æœåŠ¡ : å…³é—­æœ¬çª—å£ æˆ– æŒ‰ Ctrl+C
-    echo ============================================================
-    echo.
-    "%PYTHON%" -u app.py > "%ROOT%startup.log" 2>&1 || pause
-    set STARTED=1
+REM 1) ÏîÄ¿ÄÚÐéÄâ»·¾³£¨ËæÄ¿Â¼Ò»Æð¸´ÖÆ£¬¹ÊÓÃ %~dp0 Ïà¶Ô¶¨Î»£©
+if exist "%~dp0.venv\Scripts\python.exe" (
+    "%~dp0.venv\Scripts\python.exe" -c "import flask, openpyxl" >nul 2>&1
+    if not errorlevel 1 set "PY=%~dp0.venv\Scripts\python.exe"
 )
 
-if "%STARTED%"=="0" (
-    if exist "%VENV%\Scripts\python.exe" (
-        "%VENV%\Scripts\python.exe" -c "import flask, openpyxl" >nul 2>&1 && (
-            echo.
-            echo ============================================================
-            echo   ECAHelper æ­£åœ¨å¯åŠ¨ï¼ˆvenv è¿è¡Œæ—¶ï¼‰â€¦â€¦
-            echo   è¿è¡Œæ—¥å¿— : startup.log
-            echo   è®¿é—®åœ°å€ : http://127.0.0.1:5000
-            echo   åœæ­¢æœåŠ¡ : å…³é—­æœ¬çª—å£ æˆ– æŒ‰ Ctrl+C
-            echo ============================================================
-            echo.
-            "%VENV%\Scripts\python.exe" -u app.py > "%ROOT%startup.log" 2>&1 || pause
-            set STARTED=1
-        )
+REM 2) ÏµÍ³ PATH ÖÐµÄ python£¨Ð£ÑéÒÀÀµºóÔÙ²ÉÓÃ£©
+if not defined PY for /f "delims=" %%I in ('where python 2^>nul') do (
+    if not defined PY (
+        "%%I" -c "import flask, openpyxl" >nul 2>&1 && set "PY=%%I"
     )
 )
 
-if "%STARTED%"=="0" (
-    echo [start] æœªæ£€æµ‹åˆ° flask/openpyxlã€‚è¯·å…ˆåŒå‡» setup_env.bat è”ç½‘å®‰è£…ä¾èµ–ï¼Œå†è¿è¡Œæœ¬æ–‡ä»¶ã€‚
-    echo è¯¦ç»†é”™è¯¯è§ startup.logã€‚
-    pause
+REM 3) py -3 Æô¶¯Æ÷£¨Ð£ÑéÒÀÀµºóÔÙ²ÉÓÃ£©
+if not defined PY for /f "delims=" %%I in ('where py 2^>nul') do (
+    if not defined PY (
+        "%%I" -3 -c "import flask, openpyxl" >nul 2>&1 && (set "PY=%%I" & set "PYARGS=-3")
+    )
 )
+
+if not defined PY (
+    echo.
+    echo ============================================================
+    echo   Î´ÕÒµ½¿ÉÓÃµÄ Python ÔËÐÐ»·¾³¡£
+    echo   ÐèÒª Python 3.10 »ò¸ü¸ß°æ±¾£¬ÇÒÒÑ°²×° flask / openpyxl ÒÀÀµ¡£
+    echo.
+    echo   ÇëÏÈË«»÷ deploy.bat Ò»¼ü²¿Êð£¨×Ô¶¯´´½¨ .venv ²¢°²×°ÒÀÀµ£©£¬
+    echo   »òÇ°Íù https://www.python.org/downloads/ °²×° Python ºóÖØÊÔ¡£
+    echo ============================================================
+    echo.
+    pause
+    exit /b 1
+)
+
+echo.
+echo ============================================================
+echo   ECAHelper ÕýÔÚÆô¶¯¡­¡­
+echo   ÔËÐÐÈÕÖ¾ : startup.log
+echo   ·ÃÎÊµØÖ· : http://127.0.0.1:5000
+echo   Í£Ö¹·þÎñ : ¹Ø±Õ±¾´°¿Ú »ò °´ Ctrl+C
+echo ============================================================
+echo.
+"%PY%" %PYARGS% -u "src\app.py" > "%~dp0startup.log" 2>&1 || pause
+endlocal
