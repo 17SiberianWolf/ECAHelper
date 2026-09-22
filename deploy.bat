@@ -1,4 +1,5 @@
 @echo off
+chcp 936 >nul 2>&1
 REM ==========================================================================
 REM  ECAHelper 一键部署（相对路径，整目录可搬迁）
 REM  流程：检测 Python(>=3.10) -> 创建项目内 .venv -> 升级 pip
@@ -61,6 +62,11 @@ if not exist ".venv\Scripts\python.exe" (
 
 echo [deploy] 升级 pip ...
 ".venv\Scripts\python.exe" -m pip install -U pip
+if errorlevel 1 (
+    echo [deploy] pip 升级失败，请检查网络后重试。
+    pause
+    exit /b 1
+)
 
 echo [deploy] 安装运行依赖 (requirements.txt) ...
 ".venv\Scripts\python.exe" -m pip install -r "requirements.txt"

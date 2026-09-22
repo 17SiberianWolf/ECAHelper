@@ -74,10 +74,11 @@ def _find_free_port(preferred: int) -> int:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             s.bind(("127.0.0.1", port))
-            s.close()
             return port
         except OSError:
             port += 1
+        finally:
+            s.close()
 
 
 def _bootstrap_if_empty(log) -> None:
