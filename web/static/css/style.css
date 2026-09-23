@@ -1,26 +1,35 @@
 :root {
-  --bg: #f5f6f8;
+  color-scheme: light;
+  --bg: #f6f7f9;
   --panel: #ffffff;
-  --ink: #1f2733;
-  --muted: #6b7785;
-  --line: #e3e7ee;
+  --ink: #1d1d1f;
+  --muted: #6e6e73;
+  --line: #e6e8ec;
   --brand: #2f6fed;
   --brand-d: #1f54c0;
+  --brand-soft: rgba(47,111,237,.12);
   --ok: #1f9d55;
   --warn: #d9801a;
   --bad: #d23b3b;
   --chip: #eef3ff;
+  --shadow-sm: 0 1px 2px rgba(16,24,40,.05), 0 4px 12px rgba(16,24,40,.05);
+  --shadow-md: 0 2px 6px rgba(16,24,40,.06), 0 16px 36px rgba(16,24,40,.07);
+  --focus: 0 0 0 3px rgba(47,111,237,.20);
   --topbar-h: 52px; /* 表头吸顶的 top 值依赖此变量，必须与 .topbar 实际高度保持一致 */
 }
 
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  font-family: -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Roboto, Arial, sans-serif;
   background: var(--bg);
   color: var(--ink);
   font-size: 14px;
   line-height: 1.5;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 .topbar {
@@ -29,15 +38,18 @@ body {
   justify-content: space-between;
   padding: 0 20px;
   height: var(--topbar-h); /* 表头吸顶（sticky th 的 top）依赖此高度，改动此处需同步 --topbar-h */
-  background: var(--brand);
+  background: rgba(47,111,237,.80); /* 半透明材质 + 毛玻璃，内容从下方滑过 */
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
   color: #fff;
-  box-shadow: 0 1px 4px rgba(0,0,0,.12);
+  border-bottom: 1px solid rgba(0,0,0,.06);
+  box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 2px 12px rgba(16,24,40,.10);
   /* 红框需求：滚动时导航栏常驻视野，内容从其下方滑过 */
   position: sticky;
   top: 0;
   z-index: 100;
 }
-.topbar .brand { font-weight: 700; font-size: 16px; }
+.topbar .brand { font-weight: 700; font-size: 16px; letter-spacing: -.01em; }
 .topbar .brand .sub { font-weight: 400; opacity: .85; font-size: 13px; }
 .topbar nav a {
   color: #eaf0ff;
@@ -55,13 +67,13 @@ body {
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 16px 18px;
+  border-radius: 14px;
+  padding: 18px 20px;
   margin-bottom: 16px;
-  box-shadow: 0 1px 2px rgba(0,0,0,.03);
+  box-shadow: var(--shadow-sm);
 }
-.panel h2 { margin: 0 0 12px; font-size: 16px; }
-.panel h3 { margin: 0 0 10px; font-size: 14px; color: var(--muted); }
+.panel h2 { margin: 0 0 14px; font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+.panel h3 { margin: 0 0 10px; font-size: 14px; color: var(--muted); letter-spacing: .01em; }
 
 .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
 /* 表格上方的常驻分页条：与表格保持贴合、右对齐，不与表头抢视觉焦点 */
@@ -84,29 +96,41 @@ body {
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field label { font-size: 12px; color: var(--muted); }
 input[type=text], input[type=month], select {
-  padding: 7px 9px;
+  padding: 7px 10px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
   background: #fff;
   min-width: 160px;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+input[type=text]:focus, input[type=month]:focus, select:focus {
+  outline: none; border-color: var(--brand); box-shadow: var(--focus);
 }
 
 button, .btn {
   display: inline-block;
-  padding: 8px 14px;
+  padding: 8px 15px;
   border: 1px solid var(--brand);
   background: var(--brand);
   color: #fff;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
+  font-weight: 550;
   text-decoration: none;
+  box-shadow: 0 1px 2px rgba(47,111,237,.25);
+  transition: transform 120ms ease, background 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
-button:hover, .btn:hover { background: var(--brand-d); }
-button.secondary { background: #fff; color: var(--brand); }
-button.secondary:hover { background: var(--chip); }
-button:disabled { opacity: .55; cursor: not-allowed; }
+button:hover, .btn:hover { background: var(--brand-d); box-shadow: 0 2px 8px rgba(47,111,237,.30); }
+button:active, .btn:active { transform: scale(.97); }
+button.secondary { background: #fff; color: var(--brand); border-color: var(--line); }
+button.secondary:hover { background: var(--chip); box-shadow: var(--shadow-sm); }
+button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; transform: none; }
+button:focus-visible, .btn:focus-visible, a:focus-visible,
+input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--brand); outline-offset: 2px;
+}
 
 .quick { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .quick button { padding: 5px 10px; font-size: 12px; border-color: var(--line); background:#fff; color:var(--ink); }
@@ -114,17 +138,19 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .card {
-  background: var(--chip);
-  border-radius: 8px;
-  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
 }
-.card .k { font-size: 12px; color: var(--muted); }
-.card .v { font-size: 22px; font-weight: 700; margin-top: 4px; }
+.card .k { font-size: 12px; color: var(--muted); letter-spacing: .01em; }
+.card .v { font-size: 24px; font-weight: 700; margin-top: 4px; letter-spacing: -.01em; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .card .v.small { font-size: 16px; }
 
 table { width: 100%; border-collapse: collapse; margin-top: 8px; }
 th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
-th { color: var(--muted); font-weight: 600; background: #fafbfc; }
+th { color: var(--muted); font-weight: 600; background: #fafbfc; letter-spacing: .01em; }
 tbody tr:hover { background: #f7f9ff; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
@@ -192,7 +218,7 @@ table.collapsed { display: none; }
   font-size: 14px;
   background: #fff;
 }
-.ss-input:focus { outline: none; border-color: var(--brand); }
+.ss-input:focus { outline: none; border-color: var(--brand); box-shadow: var(--focus); }
 .ss-clear {
   position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
   cursor: pointer; color: var(--muted); font-size: 14px; line-height: 1;
@@ -279,4 +305,17 @@ details.fold code { background: var(--chip); padding: 0 4px; border-radius: 3px;
 @media (max-width: 560px) {
   .filter-grid { grid-template-columns: 1fr; }
   .filter-top #btnQuery { margin-left: 0; }
+}
+
+/* ---------- Apple 设计原则落地：减弱动效偏好 + 键盘可达性 ----------
+ * 遵循 apple-design 技能：prefers-reduced-motion 下用瞬时交叉淡入替代位移动画；
+ * 键盘焦点用 focus-visible 描边，尊重系统的“减弱动效”设置。 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  button:active, .btn:active { transform: none !important; }
+  .collapse-head .arrow, .proj-toggle .arrow { transition: none !important; }
 }
