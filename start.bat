@@ -9,6 +9,9 @@ REM ==========================================================================
 setlocal enableextensions
 cd /d "%~dp0"
 
+REM 强制 UTF-8 模式：避免非中文 Windows(cp1252) 启动 app.py 时中文日志 print 到文件崩溃
+set "PYTHONUTF8=1"
+
 set "PY="
 set "PYARGS="
 
