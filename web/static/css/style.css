@@ -10,6 +10,7 @@
   --warn: #d9801a;
   --bad: #d23b3b;
   --chip: #eef3ff;
+  --topbar-h: 52px; /* 表头吸顶的 top 值依赖此变量，必须与 .topbar 实际高度保持一致 */
 }
 
 * { box-sizing: border-box; }
@@ -27,7 +28,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  height: 52px;
+  height: var(--topbar-h); /* 表头吸顶（sticky th 的 top）依赖此高度，改动此处需同步 --topbar-h */
   background: var(--brand);
   color: #fff;
   box-shadow: 0 1px 4px rgba(0,0,0,.12);
@@ -49,7 +50,7 @@ body {
 .topbar nav a.active { background: #fff; color: var(--brand-d); font-weight: 600; }
 
 .container { max-width: 1180px; margin: 18px auto; padding: 0 18px; }
-.footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px 0; }
+.footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px 0 56px; }
 
 .panel {
   background: var(--panel);
@@ -63,6 +64,23 @@ body {
 .panel h3 { margin: 0 0 10px; font-size: 14px; color: var(--muted); }
 
 .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+/* 表格上方的常驻分页条：与表格保持贴合、右对齐，不与表头抢视觉焦点 */
+.pager-top { margin: 0 0 6px; justify-content: flex-end; }
+
+/* 日志页底部分页条：固定吸附视口底部，滚动到任意位置都能翻页。
+ * 为何用 fixed 而非 sticky bottom:0：sticky bottom:0 仅当元素接近视口底部才吸附，
+ * 长表格（约 1550px）中段滚动时它仍在表格下方视口外，不会常驻；fixed 才能全程可见。
+ * z-index 18 低于 .ss-pop(30) 与 .topbar(100)，候选下拉与导航栏不会被它遮挡。 */
+#logPager {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 18;
+  background: var(--panel);
+  box-shadow: 0 -2px 6px rgba(0,0,0,.06);
+  padding: 8px 18px;
+  justify-content: flex-end;
+  margin: 0;
+}
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field label { font-size: 12px; color: var(--muted); }
 input[type=text], input[type=month], select {
@@ -109,6 +127,31 @@ th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--lin
 th { color: var(--muted); font-weight: 600; background: #fafbfc; }
 tbody tr:hover { background: #f7f9ff; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- 长表格表头吸顶 ----------
+ * 全站顶层表格的表头在页面滚动时吸附在顶部导航栏正下方，避免滚到表格中段看不到列含义。
+ * 三条硬约束（改动前务必核对）：
+ *   1. top 必须等于 .topbar 高度（--topbar-h），否则表头会被导航栏遮住；
+ *   2. z-index 必须低于 .ss-pop(30) 与 .topbar(100)，否则会压住候选下拉或导航栏；
+ *   3. 背景必须不透明，否则下方数据行会从表头透出来。
+ * border-collapse: collapse 下 sticky 表头的 border-bottom 会随滚动消失（浏览器已知渲染限制），
+ * 因此分隔线改用 inset 阴影绘制。
+ * 注：th 实际位于 thead > tr 之下，故选择器用 table > thead > tr > th 才能命中（原 table > thead > th 无法匹配）。
+ */
+table > thead > tr > th {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 20;
+  background: #fafbfc;
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+
+/* 嵌套子表（项目号下钻的 child-table）不吸顶：
+ * 它的表头会与父表表头落在同一吸附位置并互相重叠，视觉错乱。 */
+table.child-table > thead > tr > th {
+  position: static;
+  box-shadow: none;
+}
 
 .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; }
 .tag.ok { background: #e6f6ec; color: var(--ok); }

@@ -140,10 +140,10 @@
     ECA.showEl(box);
   }
 
-  function renderPager() {
-    var box = el("logPager");
+  /* 把分页控件渲染进指定容器（空态/边界态都在内部处理）。
+   * 容器不存在时安全跳过，沿用现有 if (!box) return 风格。 */
+  function renderPagerInto(box) {
     if (!box) return;
-    if (!state.total) { box.innerHTML = ""; return; }
 
     var pages = totalPages();
     var h = '<div class="quick">';
@@ -162,6 +162,23 @@
         doQuery(kind === "prev" ? state.page - 1 : state.page + 1);
       });
     });
+  }
+
+  /* 渲染一次、落两处：表格上方常驻分页条（logPagerTop）+ 表格下方吸底分页栏（logPager），
+   * 两者点击行为完全一致（同样调用 doQuery(prev/next)）。
+   * 空态（total 为 0）：两个容器清空并用 ECA.hideEl 隐藏（严禁 style.display）；
+   * 有结果：先 ECA.showEl 再渲染，确保吸底条与顶部分页条都可见。 */
+  function renderPager() {
+    var top = el("logPagerTop"), bot = el("logPager");
+    if (!state.total) {
+      if (top) top.innerHTML = "";
+      if (bot) bot.innerHTML = "";
+      ECA.hideEl(top); ECA.hideEl(bot);
+      return;
+    }
+    ECA.showEl(top); ECA.showEl(bot);
+    renderPagerInto(top);
+    renderPagerInto(bot);
   }
 
   function render() {
