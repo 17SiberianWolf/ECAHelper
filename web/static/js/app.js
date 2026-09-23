@@ -671,6 +671,7 @@
         h += card("重复文件 / 行", s.duplicate_files + " / " + s.duplicate_rows);
         h += card("异常行", s.anomaly_rows);
         h += card("0工时行", s.zero_rows);
+        h += card("项目号形态异常", (s.project_shape_rows != null ? s.project_shape_rows : "-"));
         h += card("人员总数", s.persons_total);
         h += card("有别名变体", s.persons_with_variants);
         h += card("已启用排除", s.active_exclusions);
