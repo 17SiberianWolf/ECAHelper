@@ -410,7 +410,9 @@
     api("/api/options/projects", "GET").then(function (list) {
       list = list || [];
       if (projSel) projSel.setCandidates(list.map(function (p) {
-        return { value: p.pid, label: p.pid + (p.name ? " · " + p.name : "") };
+        // AC-08-3：日期型脏项目号在下拉里带「可疑」标识（仅视觉，value 与提交值不变）
+        return { value: p.pid, label: p.pid + (p.name ? " · " + p.name : ""),
+                 badge: p.suspicious ? "可疑" : "" };
       }));
       var c = el("projectCount");
       if (c) c.textContent = list.length.toLocaleString();
