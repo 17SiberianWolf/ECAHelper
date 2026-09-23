@@ -64,6 +64,20 @@ classDiagram
     +str created_at
     +str note
   }
+  class AuditLog {
+    +int id PK
+    +str ts
+    +str level
+    +str category
+    +str action
+    +str target
+    +str result
+    +int status_code
+    +float duration_ms
+    +str detail
+    +str request_id
+    +str user_key
+  }
   class Normalizer {
     +str normalize_resource_id(raw)
     +str normalize_project_id(raw)
@@ -92,12 +106,17 @@ classDiagram
     +path export_csv(rows, lang)
   }
   class QualityService {
-    +dict metrics()
-    +list detail(category, key)
+    +dict metrics()  // 含 project_shape_rows / project_shape_values（R2-AC-08）
+    +list detail(category, key)  // category ∈ duplicate/anomaly/zero/empty_rid/project_shape
   }
   class PersonService {
     +list aliases(rid)
     +void merge(from, to)
+  }
+  class AuditService {
+    +void write_audit(...)
+    +list query_logs(filter, page, page_size)
+    +path export_logs_csv(filter)
   }
 
   TimesheetRecord "n" --> "1" ImportBatch : import_batch_id
@@ -116,3 +135,4 @@ classDiagram
   QualityService ..> Exclusion
   PersonService ..> Person
   PersonService ..> PersonMerge
+  AuditService ..> AuditLog

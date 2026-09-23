@@ -1,7 +1,7 @@
 # 附录 A：源数据实测报告
 
 > 编写：主理人齐活林（交付总监）
-> 数据来源：`C:\Users\Administrator\Desktop\ECAHelper\OriginSource\`（45 个文件全量解析，非抽样）
+> 数据来源：`C:\Users\Administrator\Desktop\ECAHelper\OriginSource\`（44 个文件全量解析，非抽样）
 > 目的：为 PRD 与系统设计提供事实基线。本报告所有数字均来自脚本实测。
 
 ---

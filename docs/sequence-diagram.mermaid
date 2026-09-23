@@ -61,3 +61,26 @@ sequenceDiagram
   Exp->>DB: 写 xlsx(openpyxl) / csv
   Exp-->>API: file path
   API-->>UI: 下载链接
+
+---
+
+sequenceDiagram
+  actor User
+  participant UI as 系统日志页 / 任意页面
+  participant API as Flask app
+  participant Hook as before/after_request + errorhandler
+  participant AU as audit_service.write_audit
+  participant F as 文件日志(eca logger)
+  participant DB as SQLite audit_log
+  User->>UI: 触发请求 / 操作
+  UI->>API: HTTP 请求
+  API->>Hook: before_request（注入 request_id）
+  Hook->>F: logger.info（含 request_id）
+  API-->>UI: 响应
+  API->>Hook: after_request（推导 category/action/target）
+  alt 非日志查询接口且未标记 _audit_done
+    Hook->>AU: write_audit(result=ok, status_code, duration_ms)
+    AU->>DB: INSERT audit_log（1 条，try/except 包裹，失败仅 warning）
+  end
+  Note over API,DB: 异常路径由 errorhandler 写入 result=fail / level=ERROR / detail=堆栈截断，并置 _audit_done
+  Note over F,DB: 日志仅落本机（data/logs/ 与 audit_log），零远程上报 / 同步
