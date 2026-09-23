@@ -11,8 +11,32 @@
 from __future__ import annotations
 
 import json
+import re
 
-from config import UNKNOWN_RESOURCE
+from config import SUSPICIOUS_PROJECT_PATTERN, UNKNOWN_RESOURCE
+
+# 项目号形态异常（问题 8 / AC-08-2）：与项目下拉的「可疑」徽标共用同一判定源
+# config.SUSPICIOUS_PROJECT_PATTERN，保证两处口径完全一致。
+# 按 PRD 决策「只标记、不删不改」——本类别**不进入排除白名单**，工时照常计入统计。
+_SHAPE_RE = re.compile(SUSPICIOUS_PROJECT_PATTERN)
+
+
+def _project_shape_values(conn) -> list[dict]:
+    """返回日期型项目号（形如 '2092-12-08 00:00:00'）的 [{value, rows, h}]。"""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT project_id_norm AS pid, COUNT(*) AS rows, "
+        "COALESCE(SUM(actuals_total_h), 0) AS h "
+        "FROM timesheet_record "
+        "WHERE project_id_norm IS NOT NULL AND project_id_norm <> '' "
+        "GROUP BY project_id_norm"
+    )
+    out = []
+    for r in cur.fetchall():
+        if _SHAPE_RE.match(r["pid"] or ""):
+            out.append({"value": r["pid"], "rows": r["rows"], "h": r["h"]})
+    out.sort(key=lambda x: (-x["h"], -x["rows"]))
+    return out
 
 
 def quality_summary(conn) -> dict:
@@ -57,6 +81,8 @@ def quality_summary(conn) -> dict:
     total_rows = tot["n"]
     total_hours = tot["h"]
 
+    shape = _project_shape_values(conn)
+
     return {
         "total_rows": total_rows,
         "total_hours": total_hours,
@@ -68,6 +94,8 @@ def quality_summary(conn) -> dict:
         "persons_total": persons_total,
         "persons_with_variants": with_variants,
         "active_exclusions": active_exclusions,
+        "project_shape_rows": sum(x["rows"] for x in shape),
+        "project_shape_values": shape,
     }
 
 
@@ -151,6 +179,18 @@ def detail_rows(conn, category: str, limit: int = 500) -> list[dict]:
             f"WHERE r.resource_id_norm = '{UNKNOWN_RESOURCE}' "
             "ORDER BY r.source_file, r.source_row LIMIT ?",
             (limit,),
+        )
+    elif category == "project_shape":
+        # 先用同一判定源取到命中项目号，再按号取明细（保证与徽标/汇总口径一致）
+        vals = [v["value"] for v in _project_shape_values(conn)]
+        if not vals:
+            return []
+        ph = ",".join("?" for _ in vals)
+        cur.execute(
+            f"SELECT {base_cols} FROM timesheet_record r "
+            f"WHERE r.project_id_norm IN ({ph}) "
+            "ORDER BY r.source_file, r.source_row LIMIT ?",
+            (*vals, limit),
         )
     else:
         return []

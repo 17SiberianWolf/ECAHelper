@@ -17,6 +17,10 @@ bp = Blueprint("quality_routes", __name__)
 
 _VALID = ("duplicate", "anomaly", "zero", "empty_rid")
 
+# project_shape（项目号形态异常）**只做标记、不删不改**（PRD 决策 / AC-08），
+# 因此它只放开「明细下钻查询」，**不进入 _VALID**，避免被勾选进 exclusion 排除掉。
+_DETAIL_VALID = _VALID + ("project_shape",)
+
 
 @bp.route("/quality")
 def quality_page():
@@ -41,7 +45,7 @@ def api_quality_detail():
         limit = int(request.args.get("limit", 500))
     except ValueError:
         limit = 500
-    if category not in _VALID:
+    if category not in _DETAIL_VALID:
         return jsonify({"error": "unknown category"}), 400
     conn = get_connection()
     try:
