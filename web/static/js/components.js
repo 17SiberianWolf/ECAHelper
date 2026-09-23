@@ -104,7 +104,14 @@
     self.value = opts.value != null ? String(opts.value) : (self.hidden ? self.hidden.value : "");
     self.activeIndex = -1;
     self.shown = [];
-    self.open = false;
+    /* 下拉开合状态用闭包变量保存，绝不挂到 self.open 上——
+     * 旧版把布尔状态写在 self.open（L107），又在构造末尾用
+     * self.open = function(){...}（L308）公开方法把它覆盖成函数（恒真值），
+     * 导致 openPop() 的 `if (self.open) return` 守卫在「首次 closePop 之前」
+     * 永远提前返回：页面加载后直接点击输入框/输入关键字，候选面板不弹；
+     * 直到按过 Enter/Escape/Tab、点过面板外或 × 之后才恢复正常——
+     * 这正是"输入时有时弹不出候选"的根因（缺陷：输入不自动响应）。 */
+    var isOpen = false;
 
     var uid = "ss" + (++_ssSeq);
     mount.classList.add("ss");
@@ -202,15 +209,15 @@
       clearEl.classList.toggle("hidden", !self.value);
     }
     function openPop() {
-      if (self.open) return;
-      self.open = true;
+      if (isOpen) return;
+      isOpen = true;
       renderList();
       pop.classList.remove("hidden");
       input.setAttribute("aria-expanded", "true");
     }
     function closePop() {
-      if (!self.open) return;
-      self.open = false;
+      if (!isOpen) return;
+      isOpen = false;
       pop.classList.add("hidden");
       input.setAttribute("aria-expanded", "false");
     }
@@ -238,13 +245,17 @@
     input.addEventListener("focus", function () { openPop(); });
     input.addEventListener("input", function () { renderList(); openPop(); });
     input.addEventListener("keydown", function (e) {
+      /* 中文输入法合成期间（isComposing / keyCode 229），Enter 与方向键属于
+       * IME 的选字/翻候选操作，不是下拉的键盘导航或提交——
+       * 不加此守卫会把未上屏的拼音串提前 commit（中文环境输入不稳的第二来源）。 */
+      if (e.isComposing || e.keyCode === 229) return;
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        if (!self.open) openPop();
+        if (!isOpen) openPop();
         setActive(self.activeIndex + 1);
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        if (!self.open) openPop();
+        if (!isOpen) openPop();
         setActive(self.activeIndex - 1);
       } else if (e.key === "Enter") {
         e.preventDefault();
@@ -298,15 +309,16 @@
     };
     self.setCandidates = function (arr) {
       self.candidates = normalizeCandidates(arr || []);
-      if (self.open) renderList();
+      if (isOpen) renderList();
     };
     self.setBadge = function (v, badge) {
       if (v == null) return;
       self.badgeMap[String(v)] = badge;
-      if (self.open) renderList();
+      if (isOpen) renderList();
     };
     self.open = function () { openPop(); };
     self.close = function () { closePop(); };
+    self.isOpen = function () { return isOpen; };
     self.focus = function () { input.focus(); };
     self.destroy = function () {
       document.removeEventListener("click", onDocClick);
